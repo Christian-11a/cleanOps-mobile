@@ -67,14 +67,6 @@ export default function CustomerDashboardScreen() {
             </TouchableOpacity>
           </View>
           <Text style={st.headerSub}>Overview of your recent orders and activity.</Text>
-          {profile?.money_balance !== undefined && (
-            <View style={st.balancePill}>
-              <Ionicons name="wallet-outline" size={13} color="rgba(255,255,255,0.8)" />
-              <Text style={st.balanceText}>
-                Balance: <Text style={st.balanceBold}>${Number(profile.money_balance).toFixed(2)}</Text>
-              </Text>
-            </View>
-          )}
         </LinearGradient>
 
         {/* Stats */}

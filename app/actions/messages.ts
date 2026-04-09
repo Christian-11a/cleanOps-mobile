@@ -1,4 +1,4 @@
-// Mobile equivalent of the web's app/actions/messages.ts
+// Mobile equivalent of app/actions/messages.ts
 import { supabase } from '@/lib/supabase';
 import type { Message } from '@/types';
 
@@ -33,7 +33,7 @@ export async function sendMessage(jobId: string, content: string): Promise<Messa
 
 export function subscribeToMessages(jobId: string, onMessage: (message: Message) => void) {
   const channel = supabase
-    .channel(`messages:${jobId}`)
+    .channel(`messages:job:${jobId}`)
     .on(
       'postgres_changes' as any,
       {
@@ -42,8 +42,14 @@ export function subscribeToMessages(jobId: string, onMessage: (message: Message)
         table: 'messages',
         filter: `job_id=eq.${jobId}`,
       },
-      (payload: any) => {
-        onMessage(payload.new as Message);
+      async (payload: any) => {
+        // Fetch with profile join since realtime payload won't have it
+        const { data } = await (supabase as any)
+          .from('messages')
+          .select('*, profiles(full_name)')
+          .eq('id', payload.new.id)
+          .single();
+        if (data) onMessage(data as Message);
       },
     )
     .subscribe();

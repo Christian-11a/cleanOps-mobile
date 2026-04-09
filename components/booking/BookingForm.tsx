@@ -119,29 +119,41 @@ export function BookingForm() {
   }
 
   async function handleSubmit() {
-    if (tasks.length === 0 || price < 100) {
-      Alert.alert('Missing info', 'Please select at least one task.');
-      return;
-    }
-    const parsedDist = parseFloat(distance);
-    if (isNaN(parsedDist) || parsedDist <= 0) {
-      Alert.alert('Invalid distance', 'Please enter a valid distance in KM.');
-      return;
-    }
-    setLoading(true);
-    try {
-      await createJob({ tasks, urgency, address, distance: parsedDist, price, size });
-      Alert.alert(
-        'Order Placed! 🎉',
-        'Your cleaning request is now open. An employee will claim it shortly.',
-        [{ text: 'View Requests', onPress: () => router.replace('/customer/requests' as any) }],
-      );
-    } catch (err: any) {
-      Alert.alert('Failed', err.message ?? 'Could not place order. Try again.');
-    } finally {
-      setLoading(false);
-    }
+  if (tasks.length === 0) {
+    Alert.alert('Missing info', 'Please select at least one task.');
+    return;
   }
+  if (!address.trim() || address.trim().length < 5) {
+    Alert.alert('Missing info', 'Please enter a valid address.');
+    return;
+  }
+  const parsedDist = parseFloat(distance);
+  if (isNaN(parsedDist) || parsedDist <= 0) {
+    Alert.alert('Invalid distance', 'Please enter a valid distance in KM.');
+    return;
+  }
+  setLoading(true);
+  try {
+    // Tasks sent as plain string array — stored as JSONB in Supabase
+    // No balance deduction — web uses mock payment, we do the same
+    await createJob({
+      tasks,          // string[]
+      urgency,
+      address: address.trim(),
+      distance: parsedDist,
+      price,
+    });
+    Alert.alert(
+      'Order Placed! 🎉',
+      'Your cleaning request is now open. An employee will claim it shortly.',
+      [{ text: 'View Requests', onPress: () => router.replace('/customer/requests' as any) }],
+    );
+  } catch (err: any) {
+    Alert.alert('Failed', err.message ?? 'Could not place order. Try again.');
+  } finally {
+    setLoading(false);
+  }
+}
 
   return (
     <View style={st.container}>

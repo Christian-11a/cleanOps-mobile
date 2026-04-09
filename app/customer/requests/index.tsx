@@ -202,12 +202,13 @@ const st = StyleSheet.create({
   searchInput: { flex: 1, fontSize: 14, color: Colors.text1 },
 
   filterList: { paddingHorizontal: 16, gap: 8, paddingBottom: 10 },
-  filterTab: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 12, paddingVertical: 7,
-    borderRadius: 20, backgroundColor: Colors.surface,
-    borderWidth: 1, borderColor: Colors.divider,
-  },
+filterTab: {
+  flexDirection: 'row', alignItems: 'center', gap: 6,
+  paddingHorizontal: 12,
+  height: 36,                          // ← fixed height, no vertical padding
+  borderRadius: 18, backgroundColor: Colors.surface,
+  borderWidth: 1, borderColor: Colors.divider,
+},
   filterTabActive: { backgroundColor: Colors.blue600, borderColor: Colors.blue600 },
   filterText:      { fontSize: 13, fontWeight: '600', color: Colors.text2 },
   filterTextActive:{ color: '#fff' },
