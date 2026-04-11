@@ -6,14 +6,17 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getOpenJobs, claimJob } from '@/app/actions/jobs';
-import { Colors } from '@/constants/colors';
+import { useColors } from '@/lib/themeContext';
 import { JobCard } from '@/components/shared/JobCard';
 import type { Job } from '@/types';
 
 export default function EmployeeFeedScreen() {
   const router = useRouter();
+  const C = useColors();
+  const insets = useSafeAreaInsets();
   const [jobs,       setJobs]       = useState<Job[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -43,43 +46,44 @@ export default function EmployeeFeedScreen() {
   }
 
   return (
-    <SafeAreaView style={st.safe}>
+    <SafeAreaView style={[st.safe, { backgroundColor: C.bg }]} edges={['top', 'left', 'right']}>
       <View style={st.header}>
         <View>
-          <Text style={st.title}>Available Jobs</Text>
-          <Text style={st.sub}>Browse and claim open cleaning jobs</Text>
+          <Text style={[st.title, { color: C.text1 }]}>Available Jobs</Text>
+          <Text style={[st.sub, { color: C.text3 }]}>Browse and claim open cleaning jobs</Text>
         </View>
-        <TouchableOpacity style={st.refreshBtn} onPress={fetchJobs} disabled={loading}>
-          <Ionicons name="refresh-outline" size={20} color={Colors.blue600} style={loading ? { opacity: 0.4 } : {}} />
+        <TouchableOpacity style={[st.refreshBtn, { backgroundColor: C.blue50 }]} onPress={fetchJobs} disabled={loading}>
+          <Ionicons name="refresh-outline" size={20} color={C.blue600} style={loading ? { opacity: 0.4 } : {}} />
         </TouchableOpacity>
       </View>
 
       <View style={st.liveBadge}>
-        <View style={st.liveDot} />
-        <Text style={st.liveText}>{jobs.length} job{jobs.length !== 1 ? 's' : ''} available</Text>
+        <View style={[st.liveDot, { backgroundColor: C.success }]} />
+        <Text style={[st.liveText, { color: C.text3 }]}>{jobs.length} job{jobs.length !== 1 ? 's' : ''} available</Text>
       </View>
 
       {loading ? (
         <View style={st.center}>
-          <ActivityIndicator size="large" color={Colors.blue600} />
-          <Text style={st.loadingText}>Finding jobs near you…</Text>
+          <ActivityIndicator size="large" color={C.blue600} />
+          <Text style={[st.loadingText, { color: C.text3 }]}>Finding jobs near you…</Text>
         </View>
       ) : (
         <FlatList
+          style={st.listFlex}
           data={jobs}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={st.list}
+          contentContainerStyle={[st.list, { paddingBottom: insets.bottom + 24 }]}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchJobs(); }} tintColor={Colors.blue600} />
+            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchJobs(); }} tintColor={C.blue600} />
           }
           ListEmptyComponent={
             <View style={st.empty}>
-              <View style={st.emptyIcon}>
-                <Ionicons name="briefcase-outline" size={36} color={Colors.text3} />
+              <View style={[st.emptyIcon, { backgroundColor: C.surface2 }]}>
+                <Ionicons name="briefcase-outline" size={36} color={C.text3} />
               </View>
-              <Text style={st.emptyTitle}>No open jobs right now</Text>
-              <Text style={st.emptyDesc}>New jobs appear here — pull down to refresh.</Text>
+              <Text style={[st.emptyTitle, { color: C.text1 }]}>No open jobs right now</Text>
+              <Text style={[st.emptyDesc, { color: C.text3 }]}>New jobs appear here — pull down to refresh.</Text>
             </View>
           }
           renderItem={({ item }) => (
@@ -98,25 +102,23 @@ export default function EmployeeFeedScreen() {
 }
 
 const st = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.bg },
+  safe: { flex: 1 },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8,
   },
-  title:  { fontSize: 22, fontWeight: '800', color: Colors.text1, letterSpacing: -0.3 },
-  sub:    { fontSize: 13, color: Colors.text3, marginTop: 2 },
-  refreshBtn: {
-    width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.blue50,
-    alignItems: 'center', justifyContent: 'center',
-  },
+  title:      { fontSize: 22, fontWeight: '800', letterSpacing: -0.3 },
+  sub:        { fontSize: 13, marginTop: 2 },
+  refreshBtn: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   liveBadge:  { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingBottom: 10 },
-  liveDot:    { width: 7, height: 7, borderRadius: 4, backgroundColor: Colors.success },
-  liveText:   { fontSize: 13, color: Colors.text3, fontWeight: '500' },
+  liveDot:    { width: 7, height: 7, borderRadius: 4 },
+  liveText:   { fontSize: 13, fontWeight: '500' },
   center:     { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  loadingText:{ fontSize: 14, color: Colors.text3 },
-  list:       { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 100 },
+  loadingText:{ fontSize: 14 },
+  listFlex:   { flex: 1 },
+  list:       { paddingHorizontal: 16, paddingTop: 4 },
   empty:      { alignItems: 'center', paddingTop: 72, gap: 10 },
-  emptyIcon:  { width: 72, height: 72, borderRadius: 20, backgroundColor: Colors.surface2, alignItems: 'center', justifyContent: 'center' },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: Colors.text1 },
-  emptyDesc:  { fontSize: 14, color: Colors.text3, textAlign: 'center', paddingHorizontal: 32 },
+  emptyIcon:  { width: 72, height: 72, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  emptyTitle: { fontSize: 17, fontWeight: '700' },
+  emptyDesc:  { fontSize: 14, textAlign: 'center', paddingHorizontal: 32 },
 });

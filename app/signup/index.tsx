@@ -14,6 +14,8 @@ import { Colors } from '@/constants/colors';
 
 const { width } = Dimensions.get('window');
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
 type Role = 'customer' | 'employee';
 
 function passwordStrength(pw: string): { bars: number; label: string; color: string } {
@@ -37,6 +39,10 @@ export default function SignupScreen() {
   async function handleSignup() {
     if (!fullName.trim() || !email.trim() || !password) {
       Alert.alert('Missing fields', 'Full name, email, and password are all required.');
+      return;
+    }
+    if (!EMAIL_RE.test(email.trim())) {
+      Alert.alert('Invalid email', 'Please enter a valid email address (e.g. you@example.com).');
       return;
     }
     if (password.length < 6) {

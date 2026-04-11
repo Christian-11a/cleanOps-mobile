@@ -8,6 +8,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/colors';
 import { createJob } from '@/app/actions/jobs';
+import { getBalance } from '@/app/actions/payments';
 import { SIZES, TASKS, URGENCIES, computePrice } from '@/stores/bookingStore';
 import type { JobUrgency } from '@/types';
 
@@ -134,8 +135,18 @@ export function BookingForm() {
   }
   setLoading(true);
   try {
-    // Tasks sent as plain string array — stored as JSONB in Supabase
-    // No balance deduction — web uses mock payment, we do the same
+    // Check balance before booking
+    const balance = await getBalance();
+    const priceInDollars = price / 100;
+    if (balance < priceInDollars) {
+      Alert.alert(
+        'Insufficient Balance',
+        `Your wallet has $${balance.toFixed(2)} but this job costs $${priceInDollars.toFixed(2)}. Please deposit funds first.`,
+      );
+      setLoading(false);
+      return;
+    }
+
     await createJob({
       tasks,          // string[]
       urgency,

@@ -22,7 +22,7 @@ yarn-debug.log*
 yarn-error.log*
 
 # OS files
-.DS_Store
+.DS_Store  
 Thumbs.db
 
 # TypeScript
@@ -30,3 +30,7 @@ Thumbs.db
 
 # Package lock (optional, some teams commit this)
 # package-lock.json
+
+.claude
+migrations
+Remarks_mobile.txt

@@ -18,7 +18,6 @@ export async function createJob(jobData: {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Unauthorized');
 
-  // Tasks stored as JSONB array of strings — no balance deduction (mock payment like web)
   const { data, error } = await (supabase as any)
     .from('jobs')
     .insert([{
@@ -28,13 +27,45 @@ export async function createJob(jobData: {
       distance: jobData.distance,
       price_amount: jobData.price,
       status: 'OPEN',
-      tasks: jobData.tasks,       // plain string array — Supabase stores as JSONB
+      tasks: jobData.tasks,
     }])
     .select()
     .single();
 
   if (error) throw error;
+
+  // Deduct balance and hold in escrow
+  const { error: escrowErr } = await (supabase as any).rpc('hold_escrow', {
+    p_job_id: data.id,
+    p_customer_id: user.id,
+    p_amount: jobData.price / 100,
+  });
+  if (escrowErr) {
+    await (supabase as any).from('jobs').delete().eq('id', data.id);
+    throw escrowErr;
+  }
+
   return normalizeJob(data);
+}
+
+// Upload proof image to Supabase Storage bucket 'proof-images'
+// Make sure the bucket exists and is public in your Supabase dashboard
+export async function uploadProofImage(uri: string, userId: string): Promise<string> {
+  const fileName = `proof_${userId}_${Date.now()}.jpg`;
+  const response = await fetch(uri);
+  const arrayBuffer = await response.arrayBuffer();
+
+  const { data, error } = await (supabase as any).storage
+    .from('proof-images')
+    .upload(fileName, arrayBuffer, { contentType: 'image/jpeg', upsert: false });
+
+  if (error) throw error;
+
+  const { data: { publicUrl } } = (supabase as any).storage
+    .from('proof-images')
+    .getPublicUrl(data.path);
+
+  return publicUrl;
 }
 
 export async function getCustomerJobs(status?: JobStatus): Promise<Job[]> {

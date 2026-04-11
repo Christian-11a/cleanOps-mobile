@@ -6,9 +6,10 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getCustomerJobs, updateJobStatus, approveJobCompletion } from '@/app/actions/jobs';
-import { Colors } from '@/constants/colors';
+import { useColors } from '@/lib/themeContext';
 import { JobCard } from '@/components/shared/JobCard';
 import type { Job, JobStatus } from '@/types';
 
@@ -25,6 +26,8 @@ const FILTERS: { value: FilterVal; label: string }[] = [
 
 export default function CustomerRequestsScreen() {
   const router = useRouter();
+  const C = useColors();
+  const insets = useSafeAreaInsets();
   const [jobs,       setJobs]       = useState<Job[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -84,26 +87,26 @@ export default function CustomerRequestsScreen() {
   }
 
   return (
-    <SafeAreaView style={st.safe}>
+    <SafeAreaView style={[st.safe, { backgroundColor: C.bg }]} edges={['top', 'left', 'right']}>
       {/* Header */}
       <View style={st.header}>
-        <Text style={st.title}>My Requests</Text>
-        <Text style={st.sub}>Track and manage all your cleaning service jobs</Text>
+        <Text style={[st.title, { color: C.text1 }]}>My Requests</Text>
+        <Text style={[st.sub, { color: C.text3 }]}>Track and manage all your cleaning service jobs</Text>
       </View>
 
       {/* Search */}
-      <View style={st.searchBar}>
-        <Ionicons name="search-outline" size={17} color={Colors.text3} />
+      <View style={[st.searchBar, { backgroundColor: C.surface, borderColor: C.divider }]}>
+        <Ionicons name="search-outline" size={17} color={C.text3} />
         <TextInput
-          style={st.searchInput}
+          style={[st.searchInput, { color: C.text1 }]}
           placeholder="Search by address or task…"
-          placeholderTextColor={Colors.text3}
+          placeholderTextColor={C.text3}
           value={search}
           onChangeText={setSearch}
         />
         {search.length > 0 && (
           <TouchableOpacity onPress={() => setSearch('')}>
-            <Ionicons name="close-circle" size={17} color={Colors.text3} />
+            <Ionicons name="close-circle" size={17} color={C.text3} />
           </TouchableOpacity>
         )}
       </View>
@@ -113,18 +116,19 @@ export default function CustomerRequestsScreen() {
         data={FILTERS}
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={st.filterRow}
         contentContainerStyle={st.filterList}
         keyExtractor={(item) => item.value}
         renderItem={({ item }) => (
           <TouchableOpacity
-            style={[st.filterTab, filter === item.value && st.filterTabActive]}
+            style={[st.filterTab, { backgroundColor: C.surface, borderColor: C.divider }, filter === item.value && { backgroundColor: C.blue600, borderColor: C.blue600 }]}
             onPress={() => setFilter(item.value)}
           >
-            <Text style={[st.filterText, filter === item.value && st.filterTextActive]}>
+            <Text style={[st.filterText, { color: C.text2 }, filter === item.value && { color: '#fff' }]}>
               {item.label}
             </Text>
-            <View style={[st.badge, filter === item.value && st.badgeActive]}>
-              <Text style={[st.badgeText, filter === item.value && st.badgeTextActive]}>
+            <View style={[st.badge, { backgroundColor: C.surface2 }, filter === item.value && { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
+              <Text style={[st.badgeText, { color: C.text3 }, filter === item.value && { color: '#fff' }]}>
                 {counts[item.value]}
               </Text>
             </View>
@@ -135,26 +139,27 @@ export default function CustomerRequestsScreen() {
       {/* List */}
       {loading ? (
         <View style={st.center}>
-          <ActivityIndicator size="large" color={Colors.blue600} />
+          <ActivityIndicator size="large" color={C.blue600} />
         </View>
       ) : (
         <FlatList
+          style={st.listFlex}
           data={filtered}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={st.list}
+          contentContainerStyle={[st.list, { paddingBottom: insets.bottom + 24 }]}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={() => { setRefreshing(true); fetchJobs(); }}
-              tintColor={Colors.blue600}
+              tintColor={C.blue600}
             />
           }
           ListEmptyComponent={
             <View style={st.empty}>
-              <Ionicons name="folder-open-outline" size={48} color={Colors.text3} />
-              <Text style={st.emptyTitle}>No requests found</Text>
-              <Text style={st.emptyDesc}>
+              <Ionicons name="folder-open-outline" size={48} color={C.text3} />
+              <Text style={[st.emptyTitle, { color: C.text1 }]}>No requests found</Text>
+              <Text style={[st.emptyDesc, { color: C.text3 }]}>
                 {search || filter !== 'all' ? 'Try adjusting your filters.' : "You haven't placed any orders yet."}
               </Text>
             </View>
@@ -188,50 +193,42 @@ export default function CustomerRequestsScreen() {
 }
 
 const st = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.bg },
-  header: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 },
-  title:  { fontSize: 22, fontWeight: '800', color: Colors.text1, letterSpacing: -0.3 },
-  sub:    { fontSize: 13, color: Colors.text3, marginTop: 2 },
+  safe:     { flex: 1 },
+  header:   { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 },
+  title:    { fontSize: 22, fontWeight: '800', letterSpacing: -0.3 },
+  sub:      { fontSize: 13, marginTop: 2 },
 
   searchBar: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: Colors.surface,
-    borderRadius: 12, borderWidth: 1, borderColor: Colors.divider,
+    borderRadius: 12, borderWidth: 1,
     paddingHorizontal: 14, marginHorizontal: 16, marginBottom: 10, height: 44,
   },
-  searchInput: { flex: 1, fontSize: 14, color: Colors.text1 },
+  searchInput: { flex: 1, fontSize: 14 },
 
+  filterRow:  { flexGrow: 0, flexShrink: 0 },
   filterList: { paddingHorizontal: 16, gap: 8, paddingBottom: 10 },
-filterTab: {
-  flexDirection: 'row', alignItems: 'center', gap: 6,
-  paddingHorizontal: 12,
-  height: 36,                          // ← fixed height, no vertical padding
-  borderRadius: 18, backgroundColor: Colors.surface,
-  borderWidth: 1, borderColor: Colors.divider,
-},
-  filterTabActive: { backgroundColor: Colors.blue600, borderColor: Colors.blue600 },
-  filterText:      { fontSize: 13, fontWeight: '600', color: Colors.text2 },
-  filterTextActive:{ color: '#fff' },
-  badge: {
-    backgroundColor: Colors.surface2,
-    borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1,
+  filterTab: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, height: 36,
+    borderRadius: 18, borderWidth: 1,
   },
-  badgeActive:     { backgroundColor: 'rgba(255,255,255,0.25)' },
-  badgeText:       { fontSize: 11, fontWeight: '700', color: Colors.text3 },
-  badgeTextActive: { color: '#fff' },
+  filterText:  { fontSize: 13, fontWeight: '600' },
+  badge:       { borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1 },
+  badgeText:   { fontSize: 11, fontWeight: '700' },
 
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  list:   { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 100 },
+  center:   { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  listFlex: { flex: 1 },
+  list:     { paddingHorizontal: 16, paddingTop: 4 },
 
   empty:      { alignItems: 'center', paddingTop: 60, gap: 10 },
-  emptyTitle: { fontSize: 16, fontWeight: '700', color: Colors.text1 },
-  emptyDesc:  { fontSize: 14, color: Colors.text3, textAlign: 'center', paddingHorizontal: 24 },
+  emptyTitle: { fontSize: 16, fontWeight: '700' },
+  emptyDesc:  { fontSize: 14, textAlign: 'center', paddingHorizontal: 24 },
 
   cancelBtn: {
     marginTop: -8, marginBottom: 12, paddingVertical: 10,
-    alignItems: 'center', borderWidth: 1, borderColor: Colors.error,
+    alignItems: 'center', borderWidth: 1, borderColor: '#EF4444',
     borderRadius: 10, backgroundColor: '#FEF2F2',
   },
-  cancelBtnText: { fontSize: 13, fontWeight: '700', color: Colors.error },
+  cancelBtnText: { fontSize: 13, fontWeight: '700', color: '#EF4444' },
   disabled: { opacity: 0.5 },
 });

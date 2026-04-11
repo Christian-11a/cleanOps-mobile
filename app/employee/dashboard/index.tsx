@@ -1,17 +1,13 @@
-// Mobile equivalent of app/employee/dashboard/page.tsx
 import React, { useEffect, useState, useCallback } from 'react';
-import {
-  View, Text, StyleSheet, ScrollView,
-  TouchableOpacity, RefreshControl, Dimensions,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/lib/authContext';
+import { useColors } from '@/lib/themeContext';
 import { getEmployeeJobs } from '@/app/actions/jobs';
 import { signOut } from '@/app/actions/auth';
-import { Colors } from '@/constants/colors';
 import { StatCard } from '@/components/shared/StatCard';
 import { JobCard } from '@/components/shared/JobCard';
 import type { Job } from '@/types';
@@ -21,6 +17,8 @@ const { width } = Dimensions.get('window');
 export default function EmployeeDashboardScreen() {
   const { profile } = useAuth();
   const router = useRouter();
+  const C = useColors();
+  const insets = useSafeAreaInsets();
   const [jobs,       setJobs]       = useState<Job[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -40,31 +38,26 @@ export default function EmployeeDashboardScreen() {
   const totalEarnings = completedJobs.reduce((s, j) => s + j.price_amount, 0);
 
   return (
-    <SafeAreaView style={st.safe}>
+    <SafeAreaView style={[st.safe, { backgroundColor: C.bg }]} edges={['top', 'left', 'right']}>
       <ScrollView
-        contentContainerStyle={st.scroll}
+        contentContainerStyle={[st.scroll, { paddingBottom: insets.bottom + 24 }]}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => { setRefreshing(true); fetchJobs(); }}
-            tintColor={Colors.blue600}
-          />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchJobs(); }} tintColor={C.blue600} />}
       >
-        <LinearGradient
-          colors={['#1565C0', '#1E88E5']}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-          style={st.headerCard}
-        >
+        <LinearGradient colors={['#1565C0', '#1E88E5']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={st.headerCard}>
           <View style={st.headerTop}>
             <View>
               <Text style={st.greeting}>Good to see you,</Text>
               <Text style={st.name}>{firstName} 👋</Text>
             </View>
-            <TouchableOpacity style={st.signOutBtn} onPress={signOut}>
-              <Ionicons name="log-out-outline" size={20} color="rgba(255,255,255,0.8)" />
-            </TouchableOpacity>
+            <View style={st.headerActions}>
+              <TouchableOpacity style={st.headerBtn} onPress={() => router.push('/employee/profile' as any)}>
+                <Ionicons name="person-circle-outline" size={20} color="rgba(255,255,255,0.8)" />
+              </TouchableOpacity>
+              <TouchableOpacity style={st.headerBtn} onPress={signOut}>
+                <Ionicons name="log-out-outline" size={20} color="rgba(255,255,255,0.8)" />
+              </TouchableOpacity>
+            </View>
           </View>
           <Text style={st.headerSub}>Overview of your work and earnings.</Text>
           {profile?.money_balance !== undefined && (
@@ -78,65 +71,61 @@ export default function EmployeeDashboardScreen() {
         </LinearGradient>
 
         <View style={st.statsRow}>
-          <StatCard label="Active"  value={activeJobs.length}    icon="timer-outline"           color={Colors.blue600} />
-          <StatCard label="Pending" value={pendingJobs.length}   icon="hourglass-outline"        color={Colors.warning} />
-          <StatCard label="Done"    value={completedJobs.length} icon="checkmark-circle-outline" color={Colors.success} />
+          <StatCard label="Active"  value={activeJobs.length}    icon="timer-outline"           color={C.blue600} />
+          <StatCard label="Pending" value={pendingJobs.length}   icon="hourglass-outline"        color={C.warning} />
+          <StatCard label="Done"    value={completedJobs.length} icon="checkmark-circle-outline" color={C.success} />
         </View>
 
-        {/* Earnings */}
-        <View style={st.earningsCard}>
+        <View style={[st.earningsCard, { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }]}>
           <View style={st.earningsLeft}>
-            <Ionicons name="cash-outline" size={22} color={Colors.success} />
+            <Ionicons name="cash-outline" size={22} color={C.success} />
             <View>
-              <Text style={st.earningsLabel}>Total Earnings</Text>
-              <Text style={st.earningsValue}>${(totalEarnings / 100).toFixed(2)}</Text>
+              <Text style={[st.earningsLabel, { color: '#065F46' }]}>Total Earnings</Text>
+              <Text style={[st.earningsValue, { color: '#047857' }]}>${(totalEarnings / 100).toFixed(2)}</Text>
             </View>
           </View>
-          <Ionicons name="trending-up-outline" size={28} color={Colors.success} style={{ opacity: 0.4 }} />
+          <Ionicons name="trending-up-outline" size={28} color={C.success} style={{ opacity: 0.4 }} />
         </View>
 
-        {/* Quick actions */}
         <View style={st.section}>
-          <Text style={st.sectionTitle}>Quick Actions</Text>
+          <Text style={[st.sectionTitle, { color: C.text1 }]}>Quick Actions</Text>
           {[
-            { label: 'Browse Available Jobs', icon: 'search-outline' as const, href: '/employee/feed',    color: Colors.blue50,  iconColor: Colors.blue600 },
-            { label: 'My Job History',        icon: 'time-outline'   as const, href: '/employee/history', color: '#ECFDF5',      iconColor: Colors.success },
+            { label: 'Browse Available Jobs', icon: 'search-outline'     as const, href: '/employee/feed',    bg: C.blue50,  ic: C.blue600 },
+            { label: 'My Jobs (In Progress)', icon: 'briefcase-outline'  as const, href: '/employee/myjobs',  bg: '#FFFBEB', ic: C.warning },
+            { label: 'Job History',           icon: 'time-outline'       as const, href: '/employee/history', bg: '#ECFDF5', ic: C.success },
           ].map((a) => (
             <TouchableOpacity
               key={a.label}
-              style={st.actionRow}
+              style={[st.actionRow, { backgroundColor: C.surface, borderColor: C.divider }]}
               onPress={() => router.push(a.href as any)}
               activeOpacity={0.85}
             >
-              <View style={[st.actionIcon, { backgroundColor: a.color }]}>
-                <Ionicons name={a.icon} size={20} color={a.iconColor} />
+              <View style={[st.actionIcon, { backgroundColor: a.bg }]}>
+                <Ionicons name={a.icon} size={20} color={a.ic} />
               </View>
-              <Text style={st.actionLabel}>{a.label}</Text>
-              <Ionicons name="chevron-forward" size={16} color={Colors.text3} />
+              <Text style={[st.actionLabel, { color: C.text1 }]}>{a.label}</Text>
+              <Ionicons name="chevron-forward" size={16} color={C.text3} />
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Recent activity */}
         <View style={st.section}>
-          <Text style={st.sectionTitle}>Recent Activity</Text>
+          <Text style={[st.sectionTitle, { color: C.text1 }]}>Recent Activity</Text>
           {loading ? (
-            <View style={st.emptyCard}><Text style={st.emptyText}>Loading…</Text></View>
+            <View style={[st.emptyCard, { backgroundColor: C.surface, borderColor: C.divider }]}>
+              <Text style={[st.emptyText, { color: C.text3 }]}>Loading…</Text>
+            </View>
           ) : jobs.length === 0 ? (
-            <View style={st.emptyCard}>
-              <Ionicons name="briefcase-outline" size={32} color={Colors.text3} />
-              <Text style={st.emptyText}>No activity yet</Text>
+            <View style={[st.emptyCard, { backgroundColor: C.surface, borderColor: C.divider }]}>
+              <Ionicons name="briefcase-outline" size={32} color={C.text3} />
+              <Text style={[st.emptyText, { color: C.text3 }]}>No activity yet</Text>
               <TouchableOpacity onPress={() => router.push('/employee/feed')}>
-                <Text style={st.emptyLink}>Browse available jobs</Text>
+                <Text style={[st.emptyLink, { color: C.blue600 }]}>Browse available jobs</Text>
               </TouchableOpacity>
             </View>
           ) : (
             jobs.slice(0, 3).map((job) => (
-              <JobCard
-                key={job.id}
-                job={job}
-                onPress={() => router.push(`/employee/jobs/${job.id}`)}
-              />
+              <JobCard key={job.id} job={job} onPress={() => router.push(`/employee/jobs/${job.id}`)} />
             ))
           )}
         </View>
@@ -146,55 +135,29 @@ export default function EmployeeDashboardScreen() {
 }
 
 const st = StyleSheet.create({
-  safe:   { flex: 1, backgroundColor: Colors.bg },
-  scroll: { paddingBottom: 100 },
-
+  safe:    { flex: 1 },
+  scroll:  { paddingBottom: 100 },
   headerCard: { margin: 16, borderRadius: 20, padding: 20 },
   headerTop:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 },
   greeting:   { fontSize: 13, color: 'rgba(255,255,255,0.7)', fontWeight: '500' },
   name:       { fontSize: Math.min(width * 0.056, 22), fontWeight: '800', color: '#fff', letterSpacing: -0.3 },
   headerSub:  { fontSize: 13, color: 'rgba(255,255,255,0.65)', marginBottom: 14 },
-  signOutBtn: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  balancePill: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, alignSelf: 'flex-start',
-  },
-  balanceText: { fontSize: 13, color: 'rgba(255,255,255,0.8)' },
-  balanceBold: { fontWeight: '800', color: '#fff' },
-
-  statsRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, marginBottom: 12 },
-
-  earningsCard: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#ECFDF5', borderRadius: 16, padding: 18,
-    marginHorizontal: 16, marginBottom: 12,
-    borderWidth: 1, borderColor: '#A7F3D0',
-  },
-  earningsLeft:  { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  earningsLabel: { fontSize: 12, color: '#065F46', fontWeight: '600' },
-  earningsValue: { fontSize: 22, fontWeight: '900', color: '#047857', letterSpacing: -0.5 },
-
-  section:      { paddingHorizontal: 16, marginBottom: 10 },
-  sectionTitle: { fontSize: 16, fontWeight: '800', color: Colors.text1, marginBottom: 12 },
-
-  actionRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: Colors.surface, borderRadius: 14, padding: 16,
-    borderWidth: 1, borderColor: Colors.divider, marginBottom: 10,
-  },
+  headerActions: { flexDirection: 'row', gap: 8 },
+  headerBtn:  { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+  balancePill:{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, alignSelf: 'flex-start' },
+  balanceText:{ fontSize: 13, color: 'rgba(255,255,255,0.8)' },
+  balanceBold:{ fontWeight: '800', color: '#fff' },
+  statsRow:   { flexDirection: 'row', gap: 10, paddingHorizontal: 16, marginBottom: 12 },
+  earningsCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: 16, padding: 18, marginHorizontal: 16, marginBottom: 12, borderWidth: 1 },
+  earningsLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  earningsLabel:{ fontSize: 12, fontWeight: '600' },
+  earningsValue:{ fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
+  section:    { paddingHorizontal: 16, marginBottom: 10 },
+  sectionTitle: { fontSize: 16, fontWeight: '800', letterSpacing: -0.2, marginBottom: 12 },
+  actionRow:  { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 14, padding: 16, borderWidth: 1, marginBottom: 10 },
   actionIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  actionLabel: { flex: 1, fontSize: 15, fontWeight: '600', color: Colors.text1 },
-
-  emptyCard: {
-    backgroundColor: Colors.surface, borderRadius: 16, padding: 32,
-    alignItems: 'center', gap: 8,
-    borderWidth: 2, borderColor: Colors.divider, borderStyle: 'dashed',
-  },
-  emptyText: { fontSize: 14, color: Colors.text3 },
-  emptyLink: { fontSize: 14, color: Colors.blue600, fontWeight: '700' },
+  actionLabel:{ flex: 1, fontSize: 15, fontWeight: '600' },
+  emptyCard:  { borderRadius: 16, padding: 32, alignItems: 'center', gap: 8, borderWidth: 2, borderStyle: 'dashed' },
+  emptyText:  { fontSize: 14 },
+  emptyLink:  { fontSize: 14, fontWeight: '700' },
 });
