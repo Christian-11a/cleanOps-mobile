@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getJob, approveJobCompletion, updateJobStatus } from '@/app/actions/jobs';
 import { useTheme } from '@/lib/themeContext';
+import { useAuth } from '@/lib/authContext';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import type { Job } from '@/types';
@@ -17,6 +18,7 @@ export default function CustomerJobDetailScreen() {
   const { id }    = useLocalSearchParams<{ id: string }>();
   const router    = useRouter();
   const { colors: C, isDark } = useTheme();
+  const { refreshProfile } = useAuth();
   const [job,       setJob]       = useState<Job | null>(null);
   const [loading,   setLoading]   = useState(true);
   const [approving, setApproving] = useState(false);
@@ -36,6 +38,7 @@ export default function CustomerJobDetailScreen() {
         try {
           await approveJobCompletion(id);
           setJob(await getJob(id));
+          await refreshProfile();
           Alert.alert('Approved!', 'Payment released to the cleaner ✅');
         } catch (err: any) { Alert.alert('Error', err.message); }
         finally { setApproving(false); }
@@ -51,6 +54,7 @@ export default function CustomerJobDetailScreen() {
         try {
           await updateJobStatus(id, 'CANCELLED');
           setJob(await getJob(id));
+          await refreshProfile();
         } catch (err: any) { Alert.alert('Error', err.message); }
         finally { setCancelling(false); }
       }},

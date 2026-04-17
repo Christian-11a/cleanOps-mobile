@@ -18,9 +18,8 @@ export default function CustomerPaymentScreen() {
   const router = useRouter();
   const { colors: C, statusColors: S } = useTheme();
   const insets = useSafeAreaInsets();
-  const { refreshProfile } = useAuth();
+  const { profile, refreshProfile } = useAuth();
 
-  const [balance,    setBalance]    = useState<number | null>(null);
   const [recentJobs, setRecentJobs] = useState<Job[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [modalMode,  setModalMode]  = useState<ModalMode>(null);
@@ -29,8 +28,7 @@ export default function CustomerPaymentScreen() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [bal, jobs] = await Promise.all([getBalance(), getCustomerJobs()]);
-      setBalance(bal);
+      const jobs = await getCustomerJobs();
       setRecentJobs(jobs.filter((j) => j.status === 'COMPLETED').slice(0, 5));
     } catch (e) { console.warn(e); }
     finally { setLoading(false); }
@@ -59,10 +57,8 @@ export default function CustomerPaymentScreen() {
         Alert.alert('Success', `$${parsed.toFixed(2)} withdrawn from your wallet.`);
       }
       setModalMode(null);
-      setBalance(null);
       setLoading(true);
-      await fetchData();
-      await refreshProfile();
+      await Promise.all([fetchData(), refreshProfile()]);
     } catch (err: any) {
       Alert.alert('Failed', err.message ?? 'Transaction failed. Try again.');
     } finally {
@@ -70,6 +66,7 @@ export default function CustomerPaymentScreen() {
     }
   }
 
+  const balance = profile?.money_balance ?? 0;
   const totalSpent = recentJobs.reduce((sum, j) => sum + j.price_amount, 0);
 
   return (
@@ -89,7 +86,7 @@ export default function CustomerPaymentScreen() {
           {/* Balance card */}
           <View style={[st.balanceCard, { backgroundColor: C.blue700 }]}>
             <Text style={st.balanceLabel}>Available Balance</Text>
-            <Text style={st.balanceValue}>${balance !== null ? Number(balance).toFixed(2) : '0.00'}</Text>
+            <Text style={st.balanceValue}>${Number(balance).toFixed(2)}</Text>
             <Text style={st.balanceSub}>CleanOps Wallet</Text>
 
             <View style={st.walletActions}>

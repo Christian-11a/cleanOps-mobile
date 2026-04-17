@@ -8,6 +8,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/lib/themeContext';
+import { useAuth } from '@/lib/authContext';
 import { createJob } from '@/app/actions/jobs';
 import { getBalance } from '@/app/actions/payments';
 import { SIZES, TASKS, URGENCIES, computePrice } from '@/stores/bookingStore';
@@ -90,6 +91,7 @@ function BookingSummary({
 export function BookingForm() {
   const router = useRouter();
   const { colors: C, statusColors: S, isDark } = useTheme();
+  const { refreshProfile } = useAuth();
   const [step,     setStep]     = useState<Step>('size');
   const [size,     setSize]     = useState('');
   const [address,  setAddress]  = useState('');
@@ -162,6 +164,10 @@ export function BookingForm() {
       size,
       customInstructions: customInstructions.trim(),
     });
+
+    // Refresh profile to sync balance on dashboard
+    await refreshProfile();
+
     Alert.alert(
       'Order Placed! 🎉',
       'Your cleaning request is now open. An employee will claim it shortly.',

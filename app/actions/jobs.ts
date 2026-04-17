@@ -23,10 +23,10 @@ export async function createJob(jobData: {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Unauthorized');
 
-  // Fetch customer name for persistence
+  // Fetch customer name and phone for persistence
   const { data: profile } = await (supabase as any)
     .from('profiles')
-    .select('full_name')
+    .select('full_name, phone')
     .eq('id', user.id)
     .single();
 
@@ -44,6 +44,7 @@ export async function createJob(jobData: {
     .insert([{
       customer_id: user.id,
       customer_name: profile?.full_name,
+      customer_phone: profile?.phone,
       urgency: jobData.urgency,
       location_address: jobData.address,
       distance: jobData.distance,
@@ -273,6 +274,8 @@ function normalizeJob(raw: any): Job {
     proof_description: commentObj?.content || raw.proof_description,
     employee_id: raw.worker_id, // map worker_id to employee_id for our type
     employee_name: raw.worker_name, // map worker_name to employee_name for our type
+    employee_phone: raw.worker_phone, // map worker_phone to employee_phone for our type
+    customer_phone: raw.customer_phone,
   } as Job;
 }
 
