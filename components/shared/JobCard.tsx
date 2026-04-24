@@ -27,7 +27,7 @@ export function JobCard({
   actionLoading 
 }: Props) {
   const { colors: C, isDark, statusColors: SC } = useTheme();
-  const price = (job.price_amount / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  const price = job.price_amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   const s = SC[job.status] ?? SC['OPEN'];
   const hasAction = showClaim || !!actionLabel;
 

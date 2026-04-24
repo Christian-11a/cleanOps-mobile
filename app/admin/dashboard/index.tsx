@@ -104,7 +104,7 @@ export default function AdminDashboardScreen() {
               </View>
               <View style={st.jobMeta}>
                 {[
-                  { icon: 'cash-outline' as const,     label: `$${(item.price_amount / 100).toFixed(2)}` },
+                  { icon: 'cash-outline' as const,     label: `$${Number(item.price_amount).toFixed(2)}` },
                   { icon: 'location-outline' as const,  label: item.location_address || '—' },
                   { icon: 'flash-outline' as const,     label: item.urgency },
                   { icon: 'time-outline' as const,      label: new Date(item.created_at).toLocaleDateString() },

@@ -36,7 +36,8 @@ export default function EmployeeDashboardScreen() {
   const activeJobs    = jobs.filter((j) => j.status === 'IN_PROGRESS');
   const pendingJobs   = jobs.filter((j) => j.status === 'PENDING_REVIEW');
   const completedJobs = jobs.filter((j) => j.status === 'COMPLETED');
-  const totalEarnings = completedJobs.reduce((s, j) => s + j.price_amount, 0);
+  // Net earnings after 10% platform fee
+  const totalEarnings = completedJobs.reduce((s, j) => s + Number(j.price_amount) * 0.9, 0);
 
   return (
     <SafeAreaView style={[st.safe, { backgroundColor: C.bg }]} edges={['top', 'left', 'right']}>
@@ -82,7 +83,7 @@ export default function EmployeeDashboardScreen() {
             <Ionicons name="cash-outline" size={22} color={C.success} />
             <View>
               <Text style={[st.earningsLabel, { color: isDark ? '#34d399' : '#065F46' }]}>Total Earnings</Text>
-              <Text style={[st.earningsValue, { color: isDark ? '#6ee7b7' : '#047857' }]}>${(totalEarnings / 100).toFixed(2)}</Text>
+              <Text style={[st.earningsValue, { color: isDark ? '#6ee7b7' : '#047857' }]}>${totalEarnings.toFixed(2)}</Text>
             </View>
           </View>
           <Ionicons name="trending-up-outline" size={28} color={C.success} style={{ opacity: 0.4 }} />
@@ -91,8 +92,8 @@ export default function EmployeeDashboardScreen() {
         <View style={st.section}>
           <Text style={[st.sectionTitle, { color: C.text1 }]}>Quick Actions</Text>
           {[
-            { label: 'Browse Available Jobs', icon: 'search-outline'     as const, href: '/employee/feed',    bg: C.blue50,  ic: C.blue600 },
-            { label: 'My Jobs (In Progress)', icon: 'briefcase-outline'  as const, href: '/employee/myjobs',  bg: isDark ? '#3b2a0a' : '#FFFBEB', ic: C.warning },
+            { label: 'Browse Available Jobs', icon: 'search-outline'     as const, href: '/employee',    bg: C.blue50,  ic: C.blue600 },
+            { label: 'My Jobs (In Progress)', icon: 'briefcase-outline'  as const, href: '/employee/active',  bg: isDark ? '#3b2a0a' : '#FFFBEB', ic: C.warning },
             { label: 'Job History',           icon: 'time-outline'       as const, href: '/employee/history', bg: isDark ? '#064e3b' : '#ECFDF5', ic: C.success },
           ].map((a) => (
             <TouchableOpacity
@@ -118,7 +119,7 @@ export default function EmployeeDashboardScreen() {
             <View style={[st.emptyCard, { backgroundColor: C.surface, borderColor: C.divider }]}>
               <Ionicons name="briefcase-outline" size={32} color={C.text3} />
               <Text style={[st.emptyText, { color: C.text3 }]}>No activity yet</Text>
-              <TouchableOpacity onPress={() => router.push('/employee/feed')}>
+              <TouchableOpacity onPress={() => router.push('/employee')}>
                 <Text style={[st.emptyLink, { color: C.blue600 }]}>Browse available jobs</Text>
               </TouchableOpacity>
             </View>

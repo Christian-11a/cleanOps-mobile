@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, ActivityIndicator, Image, Dimensions, Platform,
-  StatusBar, TextInput, Modal, BackHandler
+  StatusBar, TextInput, Modal, BackHandler, Share
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,7 +25,7 @@ export default function EmployeeJobDetailScreen() {
   const router  = useRouter();
   const insets  = useSafeAreaInsets();
   const { colors: C, isDark } = useTheme();
-  const { user } = useAuth();
+  const { user, profile: authProfile } = useAuth();
   const toast = useToast();
 
   const [job,         setJob]         = useState<Job | null>(null);
@@ -88,17 +88,20 @@ export default function EmployeeJobDetailScreen() {
   };
 
   async function handleApply() {
+    if (!job) return;
     Alert.alert('Apply for this Job?', 'The customer will review your profile before approving you.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Apply', onPress: async () => {
         setApplying(true);
-        // SIMULATION: Wait 1.5s to show the 'Pro' loading state, then succeed locally.
-        // This prevents the 'RLS Policy/Backend' error while you test the UI.
-        setTimeout(() => {
+        try {
+          await applyForJob(job.id);
           setHasApplied(true);
+          toast.show('Application sent!');
+        } catch (err: any) {
+          Alert.alert('Application Failed', err.message || 'Please try again.');
+        } finally {
           setApplying(false);
-          toast.show('Application sent! (Simulated)');
-        }, 1500);
+        }
       }},
     ]);
   }
@@ -123,15 +126,17 @@ export default function EmployeeJobDetailScreen() {
     </View>
   );
 
-  // 100% Explicit Logic for Employee Job States
+  // Determine employee's relationship to this job
   const isJobOpen     = job.status === 'OPEN';
   const isMeAssigned  = job.employee_id === user?.id;
-  const isApplied     = isJobOpen && (hasApplied || isMeAssigned);
+  // Also detect applied state by matching profile name against worker_name on the job
+  const isMeApplicant = isJobOpen && !!job.employee_name && job.employee_name === authProfile?.full_name;
+  const isApplied     = isJobOpen && (hasApplied || isMeAssigned || isMeApplicant);
   const isAvailable   = isJobOpen && !isApplied && !job.employee_id;
   const isInProgress  = job.status === 'IN_PROGRESS';
   const isPendingReview = job.status === 'PENDING_REVIEW';
   const isCompleted   = job.status === 'COMPLETED';
-  const estPayout     = (job.price_amount * 0.9) / 100;
+  const estPayout     = (job.price_amount * 0.9);
 
   if (showChat) {
     return (
@@ -173,7 +178,12 @@ export default function EmployeeJobDetailScreen() {
                <Ionicons name={theme.icon as any} size={14} color="#fff" />
                <Text style={st.urgencyText}>{theme.label}</Text>
             </View>
-            <TouchableOpacity style={st.shareBtn}>
+            <TouchableOpacity style={st.shareBtn} onPress={() => {
+              Share.share({
+                title: `CleanOps — ${job.size || 'Home'} Cleaning`,
+                message: `Job: ${job.size || 'Home'} Cleaning at ${job.location_address}\nPay: $${job.price_amount.toFixed(0)} (you earn $${estPayout.toFixed(2)})\nUrgency: ${job.urgency}`,
+              });
+            }}>
               <Ionicons name="share-outline" size={20} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -183,7 +193,7 @@ export default function EmployeeJobDetailScreen() {
              <Text style={st.jobTitle}>{job.size || 'Home'} Cleaning</Text>
              <View style={st.priceRow}>
                 <Text style={st.priceLabel}>Total Pay</Text>
-                <Text style={st.priceValue}>${(job.price_amount / 100).toFixed(0)}</Text>
+                <Text style={st.priceValue}>${job.price_amount.toFixed(0)}</Text>
              </View>
              <View style={st.payoutPill}>
                 <Text style={st.payoutText}>Your Earning (90%): <Text style={st.payoutBold}>${estPayout.toFixed(2)}</Text></Text>

@@ -1,98 +1,141 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Platform, StatusBar
+  ActivityIndicator, RefreshControl, Platform, StatusBar
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/lib/themeContext';
-
-// Mock data based on Figma 15:1095
-const MOCK_NOTIFS = [
-  { id: '1', type: 'URGENT', title: '🚨 Urgent Job Alert!', desc: '"Post-Party Cleanup" posted 3.1 mi away. $150 payout.', time: '1d ago', read: false },
-  { id: '2', type: 'URGENT', title: '🚨 Urgent Job Alert!', desc: '"Airbnb Turnover" near you (0.9 mi). $95 payout.', time: '1d ago', read: false },
-  { id: '3', type: 'PAYMENT', title: 'Payment Received 💰', desc: '$60.00 deposited for "Regular Weekly Clean". Total balance updated.', time: '7d ago', read: true },
-  { id: '4', type: 'URGENT', title: '🚨 Urgent Job Alert!', desc: '"Home Deep Clean" HIGH priority just 0.3 mi away. View details now.', time: '23h ago', read: true },
-];
+import { getNotifications, markAllNotificationsRead, formatNotification, type DBNotification } from '@/actions/notifications';
+import { formatTimeAgo } from '@/lib/utils';
 
 export default function EmployeeNotificationsScreen() {
   const router = useRouter();
-  const { colors: C } = useTheme();
+  const { colors: C, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const [notifs, setNotifs] = useState(MOCK_NOTIFS);
 
-  const markAllRead = () => {
-    setNotifs(prev => prev.map(n => ({ ...n, read: true })));
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [notifications, setNotifications] = useState<DBNotification[]>([]);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const data = await getNotifications();
+      setNotifications(data);
+    } catch (e) {
+      console.warn(e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const onRefresh = () => { setRefreshing(true); fetchData(); };
+
+  const handleMarkAllRead = async () => {
+    await markAllNotificationsRead();
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
   };
 
-  const renderItem = ({ item }: { item: typeof MOCK_NOTIFS[0] }) => (
-    <TouchableOpacity 
-      style={[st.notifCard, { backgroundColor: C.surface, borderColor: item.read ? C.divider : C.blue200 }]}
-      activeOpacity={0.7}
-    >
-      <View style={st.notifIconWrap}>
-        <Text style={st.notifEmoji}>{item.type === 'URGENT' ? '🚨' : '💰'}</Text>
-      </View>
-      <View style={st.notifContent}>
-        <View style={st.notifHeader}>
-          <Text style={[st.notifTitle, { color: C.text1 }]}>{item.title}</Text>
-          {!item.read && <View style={[st.unreadDot, { backgroundColor: '#ef4444' }]} />}
+  const unreadCount = notifications.filter(n => !n.is_read).length;
+
+  const renderItem = ({ item }: { item: DBNotification }) => {
+    const { title, desc, icon, color } = formatNotification(item);
+    return (
+      <TouchableOpacity
+        style={[st.notifCard, { backgroundColor: C.surface, borderColor: item.is_read ? C.divider : color + '60' }]}
+        onPress={() => {
+          const jobId = item.payload?.job_id;
+          if (jobId) router.push(`/employee/jobs/${jobId}`);
+        }}
+        activeOpacity={0.75}
+      >
+        <View style={[st.notifIconWrap, { backgroundColor: color + '18' }]}>
+          <Text style={st.notifEmoji}>{icon}</Text>
         </View>
-        <Text style={[st.notifDesc, { color: C.text2 }]} numberOfLines={2}>{item.desc}</Text>
-        <Text style={[st.notifTime, { color: C.text3 }]}>{item.time}</Text>
-      </View>
-    </TouchableOpacity>
-  );
+        <View style={st.notifContent}>
+          <View style={st.notifHeader}>
+            <Text style={[st.notifTitle, { color: C.text1 }]}>{title}</Text>
+            {!item.is_read && <View style={[st.unreadDot, { backgroundColor: color }]} />}
+          </View>
+          <Text style={[st.notifDesc, { color: C.text2 }]} numberOfLines={2}>{desc}</Text>
+          <Text style={[st.notifTime, { color: C.text3 }]}>{formatTimeAgo(item.created_at)}</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={[st.container, { backgroundColor: C.bg }]}>
-      <StatusBar barStyle="dark-content" />
-      
-      {/* Header */}
-      <View style={[st.header, { paddingTop: insets.top + 10, backgroundColor: C.surface, borderBottomColor: C.divider }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+
+      <LinearGradient
+        colors={['#0A0F1E', '#1e293b']}
+        style={[st.header, { paddingTop: insets.top + 12 }]}
+      >
         <View style={st.headerTop}>
           <TouchableOpacity style={st.backBtn} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={22} color={C.text1} />
+            <Ionicons name="arrow-back" size={22} color="#fff" />
           </TouchableOpacity>
           <View style={st.titleWrap}>
-            <Text style={[st.title, { color: C.text1 }]}>Notifications</Text>
-            <Text style={[st.subtitle, { color: C.text3 }]}>{notifs.filter(n => !n.read).length} unread</Text>
+            <Text style={st.title}>Notifications</Text>
+            <Text style={st.subtitle}>{unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}</Text>
           </View>
-          <TouchableOpacity style={st.markReadBtn} onPress={markAllRead}>
-             <Ionicons name="checkmark-done-outline" size={16} color={C.blue600} />
-             <Text style={[st.markReadText, { color: C.blue600 }]}>Mark all read</Text>
-          </TouchableOpacity>
+          {unreadCount > 0 && (
+            <TouchableOpacity style={st.markReadBtn} onPress={handleMarkAllRead}>
+              <Ionicons name="checkmark-done-outline" size={16} color="#22c55e" />
+              <Text style={[st.markReadText, { color: '#22c55e' }]}>Mark all read</Text>
+            </TouchableOpacity>
+          )}
         </View>
-      </View>
+      </LinearGradient>
 
-      <FlatList
-        data={notifs}
-        keyExtractor={item => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={st.listContent}
-        ListHeaderComponent={<Text style={[st.sectionTitle, { color: C.text3 }]}>Recent Activity</Text>}
-      />
+      {loading ? (
+        <View style={st.center}><ActivityIndicator color={C.blue600} size="large" /></View>
+      ) : (
+        <FlatList
+          data={notifications}
+          keyExtractor={n => n.id}
+          renderItem={renderItem}
+          contentContainerStyle={[st.listContent, { paddingBottom: insets.bottom + 40 }]}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.blue600} />}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            notifications.length > 0
+              ? <Text style={[st.sectionTitle, { color: C.text3 }]}>Recent Activity</Text>
+              : null
+          }
+          ListEmptyComponent={
+            <View style={st.empty}>
+              <Ionicons name="notifications-off-outline" size={48} color={C.text3} />
+              <Text style={[st.emptyTitle, { color: C.text1 }]}>No notifications</Text>
+              <Text style={[st.emptySub, { color: C.text3 }]}>Approved jobs and payouts will appear here.</Text>
+            </View>
+          }
+        />
+      )}
     </View>
   );
 }
 
 const st = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1 },
+  header: { paddingHorizontal: 20, paddingBottom: 16, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
   headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  backBtn: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  backBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
   titleWrap: { flex: 1, marginLeft: 12 },
-  title: { fontSize: 18, fontWeight: '800' },
-  subtitle: { fontSize: 12, fontWeight: '500' },
+  title: { fontSize: 18, fontWeight: '800', color: '#fff' },
+  subtitle: { fontSize: 12, fontWeight: '500', color: '#94a3b8' },
   markReadBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   markReadText: { fontSize: 12, fontWeight: '700' },
-
-  listContent: { padding: 16, paddingBottom: 40 },
+  listContent: { padding: 16 },
   sectionTitle: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 12, marginLeft: 4 },
-  
   notifCard: { flexDirection: 'row', padding: 16, borderRadius: 20, borderWidth: 1, marginBottom: 12, gap: 12 },
-  notifIconWrap: { width: 44, height: 44, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.03)', alignItems: 'center', justifyContent: 'center' },
+  notifIconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   notifEmoji: { fontSize: 20 },
   notifContent: { flex: 1, gap: 4 },
   notifHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -100,4 +143,8 @@ const st = StyleSheet.create({
   unreadDot: { width: 8, height: 8, borderRadius: 4 },
   notifDesc: { fontSize: 13, lineHeight: 18 },
   notifTime: { fontSize: 11, fontWeight: '500', marginTop: 2 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  empty: { alignItems: 'center', paddingTop: 60, gap: 12 },
+  emptyTitle: { fontSize: 18, fontWeight: '800' },
+  emptySub: { fontSize: 13, textAlign: 'center', paddingHorizontal: 40 },
 });

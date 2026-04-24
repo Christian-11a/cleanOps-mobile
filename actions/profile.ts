@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import type { Profile, EmployeeAvailability } from '@/types';
 
-export async function updateProfile(fullName: string, phone?: string): Promise<void> {
+export async function updateProfile(fullName: string, phone?: string, address?: string): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Unauthorized');
 
@@ -9,7 +9,8 @@ export async function updateProfile(fullName: string, phone?: string): Promise<v
     .from('profiles')
     .update({ 
       full_name: fullName.trim(),
-      phone: phone?.trim() || null
+      phone: phone?.trim() || null,
+      location_address: address?.trim() || null
     })
     .eq('id', user.id);
 

@@ -1,18 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
-  TouchableOpacity, Alert, ActivityIndicator, Image, Modal, BackHandler, StatusBar, Platform
+  TouchableOpacity, Alert, ActivityIndicator, Image, Modal, BackHandler, StatusBar, Platform, Dimensions
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { getJob, approveJobCompletion, cancelJob, approveApplication } from '@/actions/jobs';
+import { getJob, approveJobCompletion, cancelJob, approveApplication, rejectApplication } from '@/actions/jobs';
+import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/themeContext';
 import { useAuth } from '@/lib/authContext';
 import { useToast } from '@/lib/toastContext';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import type { Job } from '@/types';
+
+const { width } = Dimensions.get('window');
 
 const STEPS = [
   { id: 'OPEN', label: 'Posted' },
@@ -28,12 +31,20 @@ export default function CustomerJobDetailScreen() {
   const { refreshProfile } = useAuth();
   const insets = useSafeAreaInsets();
   const toast = useToast();
-  const [job,       setJob]       = useState<Job | null>(null);
-  const [loading,   setLoading]   = useState(true);
-  const [approving, setApproving] = useState(false);
-  const [cancelling,setCancelling]= useState(false);
-  const [showChat,  setShowChat]  = useState(false);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [job,            setJob]           = useState<Job | null>(null);
+  const [loading,        setLoading]       = useState(true);
+  const [approving,      setApproving]     = useState(false);
+  const [cancelling,     setCancelling]    = useState(false);
+  const [rejecting,      setRejecting]     = useState(false);
+  const [showChat,       setShowChat]      = useState(false);
+  const [selectedImage,  setSelectedImage] = useState<string | null>(null);
+  const [applicantRating, setApplicantRating] = useState<number | null>(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [applicantProfile, setApplicantProfile] = useState<{
+    full_name: string; rating: number | null; phone: string | null;
+    created_at: string; jobs_completed: number;
+  } | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
 
   async function fetchJob() {
     try {
@@ -57,19 +68,34 @@ export default function CustomerJobDetailScreen() {
     return () => sub.remove();
   }, [showChat]);
 
+  useEffect(() => { fetchJob(); }, [id]);
+
+  // Fetch applicant's real rating once we have their worker_id
   useEffect(() => {
-    fetchJob();
-  }, [id]);
+    const workerId = (job as any)?.worker_id;
+    if (!workerId || job?.status !== 'OPEN') return;
+    (supabase as any)
+      .from('profiles')
+      .select('rating')
+      .eq('id', workerId)
+      .single()
+      .then(({ data }: any) => {
+        if (data?.rating) setApplicantRating(Number(data.rating));
+      });
+  }, [(job as any)?.worker_id, job?.status]);
 
   async function handleApproveCleaner() {
     if (!job?.employee_name) return;
+    const workerId = (job as any).worker_id;
+    if (!workerId) {
+      Alert.alert('Cannot Approve', 'The applicant ID is missing. The cleaner may need to reapply.');
+      return;
+    }
     setApproving(true);
     try {
-      // In this premium flow, worker_name holds the candidate name if status is OPEN
-      // In a real app, worker_id would be the applicant's ID.
-      await approveApplication(id, (job as any).worker_id || ''); 
+      await approveApplication(id, workerId);
       await fetchJob();
-      toast.show('Cleaner approved!');
+      toast.show('Cleaner approved! Job is now In Progress.');
     } catch (err: any) {
       Alert.alert('Error', err.message);
     } finally {
@@ -108,6 +134,48 @@ export default function CustomerJobDetailScreen() {
     ]);
   }
 
+  async function handleReject() {
+    Alert.alert('Reject Applicant?', 'This will remove the current applicant and reopen the job for others.', [
+      { text: 'Keep', style: 'cancel' },
+      { text: 'Reject', style: 'destructive', onPress: async () => {
+        setRejecting(true);
+        try {
+          await rejectApplication(id);
+          setApplicantRating(null);
+          setApplicantProfile(null);
+          setJob(await getJob(id));
+          toast.show('Applicant removed. Job is open again.');
+        } catch (err: any) { Alert.alert('Error', err.message); }
+        finally { setRejecting(false); }
+      }},
+    ]);
+  }
+
+  async function handleViewProfile() {
+    const workerId = (job as any)?.worker_id;
+    if (!workerId) return;
+    setShowProfileModal(true);
+    if (applicantProfile) return; // already loaded
+    setLoadingProfile(true);
+    try {
+      const [{ data: prof }, { count }] = await Promise.all([
+        (supabase as any).from('profiles').select('full_name, rating, phone, created_at').eq('id', workerId).single(),
+        (supabase as any).from('jobs').select('*', { count: 'exact', head: true }).eq('worker_id', workerId).eq('status', 'COMPLETED'),
+      ]);
+      setApplicantProfile({
+        full_name: prof?.full_name || 'Unknown',
+        rating: prof?.rating ? Number(prof.rating) : null,
+        phone: prof?.phone || null,
+        created_at: prof?.created_at || '',
+        jobs_completed: count ?? 0,
+      });
+    } catch (e) {
+      console.warn(e);
+    } finally {
+      setLoadingProfile(false);
+    }
+  }
+
   const goBack = () => {
     if (showChat) setShowChat(false);
     else if (router.canGoBack()) router.back();
@@ -121,15 +189,17 @@ export default function CustomerJobDetailScreen() {
     <View style={[st.container, { backgroundColor: '#f0f4f8' }]}><View style={st.center}><Text style={{ color: C.text3 }}>Job not found</Text></View></View>
   );
 
-  const price = (job.price_amount / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  const price = Number(job.price_amount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   const isUrgent = job.urgency === 'HIGH';
-  const urgencyColor = isUrgent ? '#22c55e' : '#22c55e'; // matching figma Standard Priority
-  const urgencyText = isUrgent ? '#166534' : '#166534';
+  const urgencyColor = isUrgent ? '#ef4444' : job.urgency === 'NORMAL' ? '#f59e0b' : '#22c55e';
+  const urgencyText  = isUrgent ? '#b91c1c' : job.urgency === 'NORMAL' ? '#92400e' : '#166534';
   const urgencyLabel = isUrgent ? 'Urgent Priority' : job.urgency === 'NORMAL' ? 'Medium Priority' : 'Standard Priority';
-  
+
   const currentStepIdx = STEPS.findIndex(s => s.id === job.status);
   const taskCount = job.tasks?.length || 0;
-  const completedCount = 0; // Placeholder
+  const ratingDisplay = applicantRating !== null
+    ? `${applicantRating.toFixed(1)} ⭐ • ${applicantRating >= 4.5 ? 'Excellent' : applicantRating >= 4 ? 'Great' : 'Good'}`
+    : 'New Cleaner';
 
   return (
     <View style={[st.container, { backgroundColor: '#f0f4f8' }]}>
@@ -202,16 +272,7 @@ export default function CustomerJobDetailScreen() {
               <Text style={[st.urgencyText, { color: urgencyText }]}>{urgencyLabel}</Text>
             </View>
 
-            <View style={st.tasksProgress}>
-               <Text style={st.tasksProgressLabel}>Tasks — {completedCount}/{taskCount} done</Text>
-               <View style={st.progressBarBg}>
-                  <LinearGradient 
-                    colors={['#0ea5e9', '#0284c7']} 
-                    style={[st.progressBarFill, { width: `${taskCount > 0 ? (completedCount/taskCount)*100 : 0}%` }]} 
-                    start={{x: 0, y: 0}} end={{x: 1, y: 0}}
-                  />
-               </View>
-            </View>
+            <Text style={[st.tasksProgressLabel, { marginBottom: 8 }]}>{taskCount} task{taskCount !== 1 ? 's' : ''} requested</Text>
 
             {job.tasks?.map((t, i) => (
                <View key={i} style={st.taskItem}>
@@ -257,27 +318,40 @@ export default function CustomerJobDetailScreen() {
               <Text style={st.cardTitle}>Interested Cleaners</Text>
               {job.employee_name ? (
                 <View style={st.applicantCard}>
-                  <View style={st.applicantInfo}>
+                  <TouchableOpacity style={st.applicantInfo} onPress={handleViewProfile} activeOpacity={0.75}>
                     <View style={st.avatarPlaceholder}>
                       <Ionicons name="person" size={20} color="#94a3b8" />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={st.applicantName}>{job.employee_name}</Text>
                       <View style={st.ratingRow}>
-                        <Ionicons name="star" size={12} color="#fbbf24" />
-                        <Text style={st.ratingText}>5.0 • Highly Recommended</Text>
+                        {applicantRating !== null && <Ionicons name="star" size={12} color="#fbbf24" />}
+                        <Text style={st.ratingText}>{ratingDisplay}</Text>
                       </View>
                     </View>
-                  </View>
-                  <TouchableOpacity
-                    style={[st.approveCleanerBtn, approving && st.disabled]}
-                    onPress={handleApproveCleaner}
-                    disabled={approving}
-                  >
-                    <LinearGradient colors={['#0ea5e9', '#0284c7']} style={st.btnGradient}>
-                      {approving ? <ActivityIndicator color="#fff" /> : <Text style={st.approveCleanerText}>Approve & Hire</Text>}
-                    </LinearGradient>
+                    <View style={st.viewProfilePill}>
+                      <Text style={st.viewProfileText}>View Profile</Text>
+                      <Ionicons name="chevron-forward" size={12} color="#0284c7" />
+                    </View>
                   </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TouchableOpacity
+                      style={[st.rejectBtn, rejecting && st.disabled]}
+                      onPress={handleReject}
+                      disabled={rejecting || approving}
+                    >
+                      {rejecting ? <ActivityIndicator color="#ef4444" size="small" /> : <Text style={st.rejectBtnText}>Reject</Text>}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[st.approveCleanerBtn, { flex: 1 }, approving && st.disabled]}
+                      onPress={handleApproveCleaner}
+                      disabled={approving || rejecting}
+                    >
+                      <LinearGradient colors={['#0ea5e9', '#0284c7']} style={st.btnGradient}>
+                        {approving ? <ActivityIndicator color="#fff" /> : <Text style={st.approveCleanerText}>Approve & Hire</Text>}
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               ) : (
                 <View style={st.emptyApplicants}>
@@ -322,9 +396,80 @@ export default function CustomerJobDetailScreen() {
         </ScrollView>
       )}
 
+      {/* Applicant Profile Modal */}
+      <Modal visible={showProfileModal} transparent animationType="slide" onRequestClose={() => setShowProfileModal(false)}>
+        <TouchableOpacity style={st.modalOverlay} activeOpacity={1} onPress={() => setShowProfileModal(false)}>
+          <View style={[st.profileSheet, { backgroundColor: '#fff' }]} onStartShouldSetResponder={() => true}>
+            <LinearGradient colors={['#0c4a6e', '#0284c7']} style={st.profileHeader}>
+              <View style={st.profileAvatarLarge}>
+                <Ionicons name="person" size={36} color="#94a3b8" />
+              </View>
+              <Text style={st.profileName}>{applicantProfile?.full_name || job?.employee_name || '—'}</Text>
+              {applicantProfile?.rating !== null && applicantProfile?.rating !== undefined ? (
+                <View style={st.profileRatingRow}>
+                  <Ionicons name="star" size={14} color="#fbbf24" />
+                  <Text style={st.profileRatingText}>{applicantProfile.rating.toFixed(1)} rating</Text>
+                </View>
+              ) : (
+                <Text style={st.profileRatingText}>New Cleaner</Text>
+              )}
+            </LinearGradient>
+
+            <View style={st.profileBody}>
+              {loadingProfile ? (
+                <ActivityIndicator color="#0284c7" style={{ marginVertical: 24 }} />
+              ) : (
+                <>
+                  <View style={st.profileStatRow}>
+                    <View style={st.profileStat}>
+                      <Ionicons name="briefcase-outline" size={20} color="#0284c7" />
+                      <Text style={st.profileStatValue}>{applicantProfile?.jobs_completed ?? 0}</Text>
+                      <Text style={st.profileStatLabel}>Jobs Done</Text>
+                    </View>
+                    <View style={[st.profileStat, { borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#e2e8f0' }]}>
+                      <Ionicons name="star-outline" size={20} color="#fbbf24" />
+                      <Text style={st.profileStatValue}>
+                        {applicantProfile?.rating !== null && applicantProfile?.rating !== undefined
+                          ? applicantProfile.rating.toFixed(1) : '—'}
+                      </Text>
+                      <Text style={st.profileStatLabel}>Rating</Text>
+                    </View>
+                    <View style={st.profileStat}>
+                      <Ionicons name="calendar-outline" size={20} color="#22c55e" />
+                      <Text style={st.profileStatValue}>
+                        {applicantProfile?.created_at
+                          ? new Date(applicantProfile.created_at).getFullYear().toString()
+                          : '—'}
+                      </Text>
+                      <Text style={st.profileStatLabel}>Member Since</Text>
+                    </View>
+                  </View>
+
+                  {applicantProfile?.phone && (
+                    <View style={[st.profileInfoRow, { backgroundColor: '#f8fafc' }]}>
+                      <Ionicons name="call-outline" size={16} color="#64748b" />
+                      <Text style={st.profileInfoText}>{applicantProfile.phone}</Text>
+                    </View>
+                  )}
+
+                  <View style={[st.profileInfoRow, { backgroundColor: '#f0fdf4' }]}>
+                    <Ionicons name="shield-checkmark-outline" size={16} color="#22c55e" />
+                    <Text style={[st.profileInfoText, { color: '#15803d' }]}>Verified Cleaner on CleanOps</Text>
+                  </View>
+                </>
+              )}
+
+              <TouchableOpacity style={st.profileCloseBtn} onPress={() => setShowProfileModal(false)}>
+                <Text style={st.profileCloseBtnText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Image Preview Modal */}
       <Modal visible={!!selectedImage} transparent animationType="fade">
-        <View style={st.modalOverlay}>
+        <View style={st.imageModalOverlay}>
           <TouchableOpacity style={st.modalCloseBtn} onPress={() => setSelectedImage(null)}>
             <Ionicons name="close" size={28} color="#fff" />
           </TouchableOpacity>
@@ -473,6 +618,17 @@ const st = StyleSheet.create({
     fontSize: 11,
     color: '#64748b',
   },
+  rejectBtn: {
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#fca5a5',
+    backgroundColor: '#fff1f2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  rejectBtnText: { fontSize: 13, fontWeight: '700', color: '#ef4444' },
   approveCleanerBtn: {
     height: 44,
     borderRadius: 12,
@@ -500,8 +656,28 @@ const st = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  imageModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' },
   modalCloseBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 10 },
   fullImage: { width: '100%', height: '80%' },
   disabled: { opacity: 0.5 },
+
+  viewProfilePill: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#e0f2fe', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 },
+  viewProfileText: { fontSize: 11, fontWeight: '700', color: '#0284c7' },
+
+  profileSheet: { borderTopLeftRadius: 32, borderTopRightRadius: 32, overflow: 'hidden' },
+  profileHeader: { alignItems: 'center', paddingTop: 28, paddingBottom: 24, gap: 8 },
+  profileAvatarLarge: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: 'rgba(255,255,255,0.3)' },
+  profileName: { fontSize: 20, fontWeight: '800', color: '#fff' },
+  profileRatingRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  profileRatingText: { fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: '600' },
+  profileBody: { padding: 20, gap: 12 },
+  profileStatRow: { flexDirection: 'row', backgroundColor: '#f8fafc', borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: '#e2e8f0' },
+  profileStat: { flex: 1, alignItems: 'center', paddingVertical: 16, gap: 4 },
+  profileStatValue: { fontSize: 18, fontWeight: '800', color: '#0f172a' },
+  profileStatLabel: { fontSize: 11, color: '#64748b', fontWeight: '500' },
+  profileInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 14 },
+  profileInfoText: { fontSize: 13, fontWeight: '600', color: '#334155' },
+  profileCloseBtn: { backgroundColor: '#f1f5f9', borderRadius: 16, paddingVertical: 14, alignItems: 'center', marginTop: 8 },
+  profileCloseBtnText: { fontSize: 14, fontWeight: '700', color: '#64748b' },
 });

@@ -87,14 +87,17 @@ export default function CustomerWalletTab() {
   const escrowHeld = useMemo(() => {
     return recentJobs
       .filter(j => j.status === 'OPEN' || j.status === 'IN_PROGRESS' || j.status === 'PENDING_REVIEW')
-      .reduce((sum, j) => sum + j.price_amount, 0) / 100;
+      .reduce((sum, j) => sum + Number(j.price_amount), 0);
   }, [recentJobs]);
 
-  const totalDeposited = 815.00; // Mocked total as per Figma
+  const totalDeposited = useMemo(() => {
+    // Approximate: current balance + all job payments (spent + held in escrow)
+    return balance + recentJobs.reduce((sum, j) => sum + Number(j.price_amount), 0);
+  }, [balance, recentJobs]);
   const totalSpent = useMemo(() => {
     return recentJobs
       .filter(j => j.status === 'COMPLETED')
-      .reduce((sum, j) => sum + j.price_amount, 0) / 100;
+      .reduce((sum, j) => sum + Number(j.price_amount), 0);
   }, [recentJobs]);
 
   const defaultMethod = paymentMethods.find(m => m.isDefault);
@@ -245,7 +248,7 @@ export default function CustomerWalletTab() {
     let icon = 'cash-outline';
     let color = C.blue600;
     let title = job.size || 'Cleaning Service';
-    let amount = (job.price_amount / 100).toFixed(2);
+    let amount = Number(job.price_amount).toFixed(2);
     let status = 'Paid';
     let sign = '-';
 

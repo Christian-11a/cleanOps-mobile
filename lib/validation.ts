@@ -43,14 +43,13 @@ export function isValidCardholder(name: string): boolean {
 }
 
 /**
- * Validates address: length > 15, contains at least one number,
- * and a common street keyword (St, Ave, Blvd, Brgy, etc.)
+ * Validates address: length >= 10 and contains at least one space
+ * (e.g., '123 Main St' or 'Brgy Central')
  */
 export function isStrictAddress(address: string): boolean {
   const trimmed = address.trim();
-  const hasNumber = /\d/.test(trimmed);
-  const hasStreetKeyword = /\b(st|ave|blvd|rd|ln|dr|ct|way|brgy|village|road|street|avenue|boulevard)\b/i.test(trimmed);
-  return trimmed.length >= 15 && hasNumber && hasStreetKeyword;
+  const hasSpace = trimmed.includes(' ');
+  return trimmed.length >= 10 && hasSpace;
 }
 
 /**

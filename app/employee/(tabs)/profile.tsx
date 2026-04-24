@@ -29,7 +29,7 @@ export default function EmployeeProfileScreen() {
   const stats = {
     jobsDone: profile?.total_jobs || 0,
     rating: profile?.rating || 0,
-    earned: (profile?.money_balance || 0) / 100
+    earned: (profile?.money_balance || 0)
   };
 
   const MENU_ITEMS = [
@@ -123,12 +123,18 @@ export default function EmployeeProfileScreen() {
                     <Text style={[st.infoVal, { color: C.text1 }]}>{profile?.phone || 'N/A'}</Text>
                  </View>
                  <View style={st.infoRow}>
-                    <Text style={[st.infoLabel, { color: C.text3 }]}>Location</Text>
-                    <Text style={[st.infoVal, { color: C.text1 }]}>Austin, TX</Text>
+                    <Text style={[st.infoLabel, { color: C.text3 }]}>Service Radius</Text>
+                    <Text style={[st.infoVal, { color: C.text1 }]}>
+                      {profile?.service_radius ? `${profile.service_radius} km` : 'Not set'}
+                    </Text>
                  </View>
                  <View style={st.infoRow}>
                     <Text style={[st.infoLabel, { color: C.text3 }]}>Member Since</Text>
-                    <Text style={[st.infoVal, { color: C.text1 }]}>Jan 2024</Text>
+                    <Text style={[st.infoVal, { color: C.text1 }]}>
+                      {profile?.created_at
+                        ? new Date(profile.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                        : 'N/A'}
+                    </Text>
                  </View>
               </View>
            </View>

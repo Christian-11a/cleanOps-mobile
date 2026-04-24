@@ -13,14 +13,14 @@ import { JobCard } from '@/components/shared/JobCard';
 import { formatTimeAgo } from '@/lib/utils';
 import type { Job, JobStatus } from '@/types';
 
-type FilterVal = 'all' | 'APPLIED' | JobStatus;
+type FilterVal = 'all' | JobStatus;
 
 const FILTERS: { value: FilterVal; label: string }[] = [
   { value: 'all',            label: 'All' },
-  { value: 'APPLIED',        label: 'Applied' },
   { value: 'IN_PROGRESS',    label: 'In Progress' },
   { value: 'PENDING_REVIEW', label: 'Review' },
   { value: 'COMPLETED',      label: 'Done' },
+  { value: 'CANCELLED',      label: 'Cancelled' },
 ];
 
 export default function EmployeeJobsTab() {
@@ -31,7 +31,7 @@ export default function EmployeeJobsTab() {
   const [jobs,       setJobs]       = useState<Job[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter,     setFilter]     = useState<FilterVal>('all');
+  const [filter, setFilter] = useState<FilterVal>('all');
   const [search,     setSearch]     = useState('');
 
   const fetchJobs = useCallback(async () => {
@@ -46,19 +46,15 @@ export default function EmployeeJobsTab() {
 
   const counts = useMemo(() => ({
     all:            jobs.length,
-    APPLIED:        jobs.filter(j => j.status === 'OPEN').length, // OPEN is "Applied" in our simulation
     IN_PROGRESS:    jobs.filter(j => j.status === 'IN_PROGRESS').length,
     PENDING_REVIEW: jobs.filter(j => j.status === 'PENDING_REVIEW').length,
     COMPLETED:      jobs.filter(j => j.status === 'COMPLETED').length,
+    CANCELLED:      jobs.filter(j => j.status === 'CANCELLED').length,
   }), [jobs]);
 
   const filteredJobs = useMemo(() => {
     return jobs
-      .filter(j => {
-        if (filter === 'all') return true;
-        if (filter === 'APPLIED') return j.status === 'OPEN';
-        return j.status === filter;
-      })
+      .filter(j => filter === 'all' || j.status === filter)
       .filter(j => {
         const q = search.toLowerCase();
         return j.location_address.toLowerCase().includes(q) || (j.size && j.size.toLowerCase().includes(q));
@@ -144,7 +140,7 @@ export default function EmployeeJobsTab() {
                    </View>
                 </View>
                 <View style={st.priceCol}>
-                   <Text style={[st.priceText, { color: C.text1 }]}>${(item.price_amount / 100).toFixed(0)}</Text>
+                   <Text style={[st.priceText, { color: C.text1 }]}>${Number(item.price_amount).toFixed(0)}</Text>
                    <Text style={[st.timeText, { color: C.text3 }]}>{formatTimeAgo(item.created_at)}</Text>
                 </View>
               </View>

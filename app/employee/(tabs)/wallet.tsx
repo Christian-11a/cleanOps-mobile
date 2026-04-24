@@ -77,7 +77,9 @@ export default function EmployeeWalletTab() {
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { 
+    fetchData(); 
+  }, [fetchData]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -91,7 +93,8 @@ export default function EmployeeWalletTab() {
   const pendingEarnings = 0; // Simplified as we are only showing completed history now
 
   const defaultMethod = useMemo(() => {
-    return paymentMethods.find(m => m.isDefault && m.last4);
+    // Show cards OR wallets
+    return paymentMethods.find(m => m.isDefault) || paymentMethods[0];
   }, [paymentMethods]);
 
   const allTransactions = useMemo(() => {
@@ -292,7 +295,7 @@ export default function EmployeeWalletTab() {
                     </Text>
                   </View>
                   <Text style={[st.txAmt, { color: isJob ? '#22c55e' : '#ef4444' }]}>
-                    {isJob ? '+' : '-'}${(isJob ? (tx.price_amount * 0.9 / 100) : tx.amount).toFixed(2)}
+                    {isJob ? '+' : '-'}${(isJob ? (Number(tx.price_amount) * 0.9) : tx.amount).toFixed(2)}
                   </Text>
                 </View>
               );
@@ -340,8 +343,12 @@ export default function EmployeeWalletTab() {
                     style={[st.methodBtn, { backgroundColor: C.surface2, borderColor: C.divider }]}
                     onPress={() => setShowManagePayments(true)}
                   >
-                    <Ionicons name="business-outline" size={20} color={C.blue600} />
-                    <Text style={[st.methodText, { color: C.text1 }]}>{defaultMethod.brand} (**** {defaultMethod.last4})</Text>
+                    <View style={[st.methodBrandIconSmall, { backgroundColor: defaultMethod.brand === 'Visa' ? '#1d4ed8' : (defaultMethod.brand === 'Mastercard' ? '#1a1a1a' : (defaultMethod.brand === 'Maya' ? '#00c300' : '#1a73e8')) }]}>
+                      <Text style={st.brandTextTiny}>{defaultMethod.brand.substring(0, 2)}</Text>
+                    </View>
+                    <Text style={[st.methodText, { color: C.text1 }]}>
+                      {defaultMethod.brand} {defaultMethod.last4 ? `(**** ${defaultMethod.last4})` : (defaultMethod.phoneNumber ? `(+63 ${defaultMethod.phoneNumber.slice(-4)})` : '')}
+                    </Text>
                     <Ionicons name="chevron-forward" size={16} color={C.text3} style={{ marginLeft: 'auto' }} />
                   </TouchableOpacity>
                 </>
@@ -387,9 +394,13 @@ export default function EmployeeWalletTab() {
                       style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 }}
                       onPress={() => handleSetDefault(m.id)}
                     >
-                      <Ionicons name={m.type === 'card' ? 'card-outline' : 'phone-portrait-outline'} size={20} color={C.text1} />
+                      <View style={[st.methodBrandIconSmall, { width: 32, height: 22, backgroundColor: m.brand === 'Visa' ? '#1d4ed8' : (m.brand === 'Mastercard' ? '#1a1a1a' : (m.brand === 'Maya' ? '#00c300' : '#1a73e8')) }]}>
+                        <Text style={[st.brandTextTiny, { fontSize: 9 }]}>{m.brand.substring(0, 2)}</Text>
+                      </View>
                       <View>
-                        <Text style={[st.methodText, { color: C.text1 }]}>{m.brand} (**** {m.last4})</Text>
+                        <Text style={[st.methodText, { color: C.text1 }]}>
+                          {m.brand} {m.last4 ? `(**** ${m.last4})` : (m.phoneNumber ? `(+63 ${m.phoneNumber.slice(-4)})` : '')}
+                        </Text>
                         {m.isDefault && <Text style={{ fontSize: 10, color: C.blue600, fontWeight: '700' }}>DEFAULT</Text>}
                       </View>
                     </TouchableOpacity>
@@ -626,6 +637,18 @@ const st = StyleSheet.create({
   withdrawConfirmText: { color: '#fff', fontSize: 16, fontWeight: '800' },
 
   // New Styles
+  methodBrandIconSmall: {
+    width: 40,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brandTextTiny: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '900',
+  },
   brandSelector: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   brandOption: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, borderColor: '#e2e8f0' },
   brandOptionText: { fontSize: 13, fontWeight: '600' },

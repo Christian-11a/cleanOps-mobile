@@ -21,7 +21,7 @@ export default function EditProfileScreen() {
   const [firstName, setFirstName] = useState('');
   const [lastName,  setLastName]  = useState('');
   const [phone,     setPhone]     = useState(profile?.phone ?? '');
-  const [address,   setAddress]   = useState('123 Main St, Austin, TX'); // Mock default
+  const [address,   setAddress]   = useState(profile?.location_address ?? ''); 
   const [saving,    setSaving]    = useState(false);
 
   useEffect(() => {
@@ -30,6 +30,7 @@ export default function EditProfileScreen() {
       setFirstName(parts[0] || '');
       setLastName(parts.slice(1).join(' ') || '');
       setPhone(profile.phone || '');
+      setAddress(profile.location_address || '');
     }
   }, [profile]);
 
@@ -45,7 +46,7 @@ export default function EditProfileScreen() {
     
     setSaving(true);
     try {
-      await updateProfile(fullName, phone);
+      await updateProfile(fullName, phone, address);
       await refreshProfile();
       toast.show('Profile updated successfully.');
       router.back();

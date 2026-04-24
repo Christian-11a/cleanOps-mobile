@@ -10,9 +10,9 @@ export type CleanType = {
 };
 
 export const CLEAN_TYPES: CleanType[] = [
-  { id: 'regular',  label: 'Standard Refresh', sub: 'Routine maintenance clean', price: 6000,  icon: '🧹' },
-  { id: 'deep',     label: 'All-in-One Reset', sub: 'The complete home overhaul', price: 25000, icon: '✨' },
-  { id: 'move_out', label: 'Move-In / Move-Out', sub: 'Empty property transition', price: 18000, icon: '📦' },
+  { id: 'regular',  label: 'Standard Refresh', sub: 'Routine maintenance clean', price: 60,  icon: '🧹' },
+  { id: 'deep',     label: 'All-in-One Reset', sub: 'The complete home overhaul', price: 250, icon: '✨' },
+  { id: 'move_out', label: 'Move-In / Move-Out', sub: 'Empty property transition', price: 180, icon: '📦' },
 ];
 
 export const TASKS = [
@@ -32,19 +32,19 @@ export const TASKS = [
 
 export const URGENCIES: { value: JobUrgency; label: string; desc: string; fee: number; color: string }[] = [
   { value: 'LOW',    label: 'Standard Priority', desc: 'Flexible, within a week', fee: 0,     color: '#16a34a' },
-  { value: 'NORMAL', label: 'Medium Priority',   desc: 'Within 48 hours',        fee: 1000,  color: '#d97706' },
-  { value: 'HIGH',   label: 'Urgent Priority',   desc: 'ASAP — act fast!',       fee: 2500,  color: '#dc2626' },
+  { value: 'NORMAL', label: 'Medium Priority',   desc: 'Within 48 hours',        fee: 10,  color: '#d97706' },
+  { value: 'HIGH',   label: 'Urgent Priority',   desc: 'ASAP — act fast!',       fee: 25,  color: '#dc2626' },
 ];
 
 export function computePrice(typeId: string, urgency: JobUrgency, tasksCount: number): number {
   const type = CLEAN_TYPES.find(t => t.id === typeId);
-  const base = type?.price ?? 6000;
+  const base = type?.price ?? 60;
   
   const urgencyObj = URGENCIES.find(u => u.value === urgency);
   const urgencyFee = urgencyObj?.fee ?? 0;
   
   // All-in-One is a premium flat rate (no extra task fees)
-  const taskFee = typeId === 'deep' ? 0 : (tasksCount * 500);
+  const taskFee = typeId === 'deep' ? 0 : (tasksCount * 5);
 
   return base + urgencyFee + taskFee;
 }

@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getEmployeeJobs } from '@/actions/jobs';
 import { useTheme } from '@/lib/themeContext';
@@ -37,9 +37,9 @@ export default function EmployeeHistoryScreen() {
   const completedJobs = useMemo(() => jobs.filter(j => j.status === 'COMPLETED'), [jobs]);
   
   const stats = useMemo(() => {
-    const totalGross = completedJobs.reduce((s, j) => s + j.price_amount, 0);
-    const totalNet   = totalGross * 0.9 / 100;
-    const bestJob    = [...completedJobs].sort((a, b) => b.price_amount - a.price_amount)[0];
+    const totalGross = completedJobs.reduce((s, j) => s + Number(j.price_amount), 0);
+    const totalNet   = totalGross * 0.9;
+    const bestJob    = [...completedJobs].sort((a, b) => Number(b.price_amount) - Number(a.price_amount))[0];
     
     return {
       totalEarned: totalNet,
@@ -67,7 +67,7 @@ export default function EmployeeHistoryScreen() {
            <Text style={st.totalValue}>${stats.totalEarned.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
            <View style={st.trendRow}>
               <Ionicons name="trending-up" size={14} color="#4ade80" />
-              <Text style={st.trendText}>+12% from last month</Text>
+              <Text style={st.trendText}>{stats.count} job{stats.count !== 1 ? 's' : ''} completed</Text>
            </View>
         </View>
       </LinearGradient>
@@ -101,7 +101,7 @@ export default function EmployeeHistoryScreen() {
               <View style={{ flex: 1 }}>
                  <Text style={[st.bestLabel, { color: C.text3 }]}>Best Payout</Text>
                  <Text style={[st.bestTitle, { color: C.text1 }]}>{stats.bestJob.size || 'Home'} Clean</Text>
-                 <Text style={st.bestAmt}>${(stats.bestJob.price_amount * 0.9 / 100).toFixed(2)} earned</Text>
+                 <Text style={st.bestAmt}>${(Number(stats.bestJob.price_amount) * 0.9).toFixed(2)} earned</Text>
               </View>
            </View>
          )}
@@ -120,8 +120,8 @@ export default function EmployeeHistoryScreen() {
   );
 
   const renderJobItem = ({ item }: { item: Job }) => {
-    const myEarning = item.price_amount * 0.9 / 100;
-    const fee = item.price_amount * 0.1 / 100;
+    const myEarning = Number(item.price_amount) * 0.9;
+    const fee = Number(item.price_amount) * 0.1;
     const dateStr = new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
     return (
@@ -139,7 +139,7 @@ export default function EmployeeHistoryScreen() {
            </View>
            <View style={{ alignItems: 'flex-end' }}>
               <Text style={st.jobNet}>+${myEarning.toFixed(2)}</Text>
-              <Text style={[st.jobGross, { color: C.text3 }]}>of ${(item.price_amount / 100).toFixed(0)} total</Text>
+              <Text style={[st.jobGross, { color: C.text3 }]}>of ${Number(item.price_amount).toFixed(0)} total</Text>
            </View>
         </View>
 

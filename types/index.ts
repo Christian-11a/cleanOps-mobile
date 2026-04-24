@@ -36,6 +36,7 @@ export interface Profile {
     biometrics: boolean;
   };
   service_radius: number;
+  location_address?: string;
   created_at: string;
 }
 

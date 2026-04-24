@@ -23,15 +23,8 @@ export async function signUp(formData: {
   });
   if (error) throw error;
 
-  // Create profile row (fire-and-forget, same pattern as web)
-  if (data.user) {
-    await createProfile({
-      id: data.user.id,
-      fullName: formData.fullName.trim(),
-      phoneNumber: formData.phoneNumber.trim(),
-      role: formData.role,
-    });
-  }
+  // The database trigger (handle_new_auth_user) already creates the profile row
+  // synchronously before signUp returns, so no manual insert needed here.
 
   return data;
 }
@@ -52,17 +45,20 @@ export async function signOut() {
 
 export async function createProfile(profileData: {
   id: string;
+  email?: string;
   fullName: string;
   phoneNumber: string;
   role: 'customer' | 'employee';
 }): Promise<{ success: boolean; data?: Profile; error?: string }> {
   const { data, error } = await (supabase as any)
     .from('profiles')
-    .insert({
+    .upsert({
       id: profileData.id,
+      email: profileData.email,
       full_name: profileData.fullName,
       phone: profileData.phoneNumber,
       role: profileData.role,
+      updated_at: new Date().toISOString(),
     })
     .select()
     .single();

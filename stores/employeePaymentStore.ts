@@ -84,7 +84,11 @@ export async function setDefaultPaymentMethod(id: string): Promise<void> {
 
 export async function getWithdrawals(): Promise<WithdrawalTransaction[]> {
   try {
-    const data = await AsyncStorage.getItem(STORAGE_KEY_TX);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+    
+    const key = `${STORAGE_KEY_TX}_${user.id}`;
+    const data = await AsyncStorage.getItem(key);
     return data ? JSON.parse(data) : [];
   } catch (e) {
     return [];
@@ -92,6 +96,10 @@ export async function getWithdrawals(): Promise<WithdrawalTransaction[]> {
 }
 
 export async function addWithdrawal(amount: number, method: PaymentMethod): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Unauthorized');
+  
+  const key = `${STORAGE_KEY_TX}_${user.id}`;
   const history = await getWithdrawals();
   const newTx: WithdrawalTransaction = {
     id: Math.random().toString(36).substring(7),
@@ -103,5 +111,5 @@ export async function addWithdrawal(amount: number, method: PaymentMethod): Prom
   };
 
   const updated = [newTx, ...history];
-  await AsyncStorage.setItem(STORAGE_KEY_TX, JSON.stringify(updated));
+  await AsyncStorage.setItem(key, JSON.stringify(updated));
 }

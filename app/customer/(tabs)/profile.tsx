@@ -146,7 +146,7 @@ export default function CustomerProfileTab() {
             </View>
             <View style={st.infoRow}>
               <Text style={[st.infoLabel, { color: C.text3 }]}>Location</Text>
-              <Text style={[st.infoValue, { color: C.text1 }]}>Austin, TX</Text>
+              <Text style={[st.infoValue, { color: C.text1 }]}>{profile?.location_address || 'Not set'}</Text>
             </View>
             <View style={st.infoRow}>
               <Text style={[st.infoLabel, { color: C.text3 }]}>Member Since</Text>

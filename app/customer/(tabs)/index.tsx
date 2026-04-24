@@ -52,15 +52,17 @@ export default function CustomerHomeTab() {
         getProfile(),
         getCustomerJobs()
       ]);
-      setProfile(prof);
+      // Fall back to authProfile so the greeting always shows the real name
+      setProfile(prof ?? authProfile);
       setJobs(jobList || []);
     } catch (error) {
       console.error('Fetch error:', error);
+      setProfile(authProfile);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [authProfile]);
 
   useEffect(() => {
     fetchData();
@@ -109,7 +111,6 @@ export default function CustomerHomeTab() {
             <View style={st.headerBtns}>
               <TouchableOpacity style={st.iconBtn} onPress={() => router.push('/customer/notifications')}>
                 <Ionicons name="notifications-outline" size={20} color="#fff" />
-                <View style={[st.notifBadge, { borderColor: '#0284c9' }]}><Text style={st.badgeText}>2</Text></View>
               </TouchableOpacity>
               <TouchableOpacity style={st.avatarBtn} onPress={() => router.push('/customer/profile')}>
                 <Text style={st.avatarText}>{userInitials}</Text>

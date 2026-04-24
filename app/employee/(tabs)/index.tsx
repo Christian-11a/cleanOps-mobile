@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { getOpenJobs, claimJob } from '@/actions/jobs';
+import { getOpenJobs, applyForJob } from '@/actions/jobs';
 import { useTheme } from '@/lib/themeContext';
 import { useAuth } from '@/lib/authContext';
 import { useToast } from '@/lib/toastContext';
@@ -28,7 +28,7 @@ export default function EmployeeFeedScreen() {
   const [jobs,       setJobs]       = useState<Job[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [claiming,   setClaiming]   = useState<string | null>(null);
+  const [applying,   setClaiming]   = useState<string | null>(null);
   const [filter,     setFilter]     = useState<Priority>('ALL');
 
   const fetchJobs = useCallback(async () => {
@@ -51,22 +51,26 @@ export default function EmployeeFeedScreen() {
   const stats = {
     open: jobs.length,
     urgent: jobs.filter(j => j.urgency === 'HIGH').length,
-    pool: jobs.reduce((s, j) => s + j.price_amount, 0) / 100
+    pool: jobs.reduce((s, j) => s + Number(j.price_amount), 0)
   };
 
   async function handleClaim(jobId: string) {
-    Alert.alert('Claim Job?', 'You will be assigned to this job and responsible for completing it.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Claim', onPress: async () => {
-        setClaiming(jobId);
-        try {
-          await claimJob(jobId);
-          setJobs((prev) => prev.filter((j) => j.id !== jobId));
-          toast.show('Job claimed! Go to Active to manage it.');
-        } catch (err: any) { Alert.alert('Failed', err.message ?? 'Try again.'); }
-        finally { setClaiming(null); }
-      }},
-    ]);
+    Alert.alert(
+      'Apply for Job?',
+      'The customer will review your profile and approve before you start cleaning.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Apply', onPress: async () => {
+          setClaiming(jobId);
+          try {
+            await applyForJob(jobId);
+            setJobs((prev) => prev.filter((j) => j.id !== jobId));
+            toast.show('Application sent! Wait for customer approval.');
+          } catch (err: any) { Alert.alert('Failed', err.message ?? 'Try again.'); }
+          finally { setClaiming(null); }
+        }},
+      ]
+    );
   }
 
   const renderHeader = () => (
@@ -83,9 +87,10 @@ export default function EmployeeFeedScreen() {
           <View style={st.headerActions}>
             <TouchableOpacity style={st.iconBtn} onPress={() => router.push('/employee/notifications')}>
               <Ionicons name="notifications-outline" size={20} color="#fff" />
-              <View style={st.notifBadge}><Text style={st.notifText}>2</Text></View>
             </TouchableOpacity>
-            <View style={st.avatarPill}><Text style={st.avatarText}>{firstName[0]}</Text></View>
+            <TouchableOpacity style={st.avatarPill} onPress={() => router.push('/employee/profile')}>
+              <Text style={st.avatarText}>{firstName[0]}</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -107,10 +112,10 @@ export default function EmployeeFeedScreen() {
 
       <View style={st.contentPadding}>
         <View style={st.mapHeader}>
-          <Text style={[st.sectionTitle, { color: C.text1 }]}>Live GPS Map</Text>
+          <Text style={[st.sectionTitle, { color: C.text1 }]}>Jobs Near You</Text>
           <View style={st.locationPill}>
             <Ionicons name="location-outline" size={12} color={C.text3} />
-            <Text style={[st.locationText, { color: C.text3 }]}>Austin, TX</Text>
+            <Text style={[st.locationText, { color: C.text3 }]}>Your Area</Text>
           </View>
         </View>
 
@@ -129,7 +134,7 @@ export default function EmployeeFeedScreen() {
                  <Ionicons name="navigate" size={32} color="#22c55e" />
               </View>
               <View style={st.mapBottomPill}>
-                 <Text style={st.mapInfoText}>📍 Austin, TX — {jobs.length} jobs nearby</Text>
+                 <Text style={st.mapInfoText}>📍 {jobs.length} open job{jobs.length !== 1 ? 's' : ''} available near you</Text>
               </View>
            </LinearGradient>
         </View>
@@ -188,7 +193,7 @@ export default function EmployeeFeedScreen() {
             </View>
           </View>
           <View style={st.jobPriceInfo}>
-            <Text style={[st.jobPrice, { color: C.text1 }]}>${(item.price_amount / 100).toFixed(0)}</Text>
+            <Text style={[st.jobPrice, { color: C.text1 }]}>${Number(item.price_amount).toFixed(0)}</Text>
           </View>
         </View>
 
