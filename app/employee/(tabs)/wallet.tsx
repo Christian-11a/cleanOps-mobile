@@ -70,7 +70,8 @@ export default function EmployeeWalletTab() {
       setPaymentMethods(methods);
       setWithdrawals(history);
     } catch (e) {
-      console.warn('Wallet fetch error:', e);
+      if (__DEV__) console.warn('Wallet fetch error:', e);
+      toast.show('Failed to load wallet data. Pull to refresh.', 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -425,21 +426,24 @@ export default function EmployeeWalletTab() {
 
       {/* MODAL: ADD PAYMENT METHOD */}
       <Modal visible={showAddPayment} animationType="slide" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={st.modalOverlay}>
-          <View style={[st.modalContent, { backgroundColor: C.surface }]}>
+        <TouchableOpacity style={st.modalOverlay} activeOpacity={1} onPress={() => !isProcessing && setShowAddPayment(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ justifyContent: 'flex-end' }}>
+          <View style={[st.modalContent, { backgroundColor: C.surface }]} onStartShouldSetResponder={() => true}>
             <View style={st.modalHeader}>
               <Text style={[st.modalTitle, { color: C.text1 }]}>
                 {paymentFlow === 'otp' ? `Link ${cardBrand}` : 'Add Payout Method'}
               </Text>
-              <TouchableOpacity onPress={() => setShowAddPayment(false)}>
-                <Ionicons name="close" size={24} color={C.text3} />
+              <TouchableOpacity onPress={() => setShowAddPayment(false)} disabled={isProcessing}>
+                <View style={[st.closeBtn, { backgroundColor: C.surface2 }]}>
+                  <Ionicons name="close" size={20} color={C.text2} />
+                </View>
               </TouchableOpacity>
             </View>
 
             <View style={st.modalBody}>
               {paymentFlow === 'details' ? (
                 <>
-                  <Text style={[st.inputLabel, { color: C.text2 }]}>Select Method</Text>
+                  <Text style={[st.inputLabel, { color: C.text3 }]}>Select Brand</Text>
                   <View style={st.brandSelector}>
                     {(['Visa', 'Mastercard', 'Maya', 'GCash'] as PaymentBrand[]).map(b => (
                       <TouchableOpacity 
@@ -458,7 +462,7 @@ export default function EmployeeWalletTab() {
                   {cardBrand === 'Visa' || cardBrand === 'Mastercard' ? (
                     <View style={{ marginTop: 20, gap: 16 }}>
                       <View style={st.inputSection}>
-                        <Text style={[st.inputLabel, { color: C.text2 }]}>Cardholder Name</Text>
+                        <Text style={[st.inputLabel, { color: C.text3 }]}>Cardholder Name</Text>
                         <View style={[st.amountInputWrap, { backgroundColor: C.surface2, borderColor: errors.cardholderName ? C.error : C.divider }]}>
                           <TextInput
                             style={[st.amountInput, { color: C.text1, fontSize: 16 }]}
@@ -473,8 +477,9 @@ export default function EmployeeWalletTab() {
                       </View>
 
                       <View style={st.inputSection}>
-                        <Text style={[st.inputLabel, { color: C.text2 }]}>Card Number</Text>
+                        <Text style={[st.inputLabel, { color: C.text3 }]}>Card Number</Text>
                         <View style={[st.amountInputWrap, { backgroundColor: C.surface2, borderColor: errors.cardNumber ? C.error : C.divider }]}>
+                          <Ionicons name="card-outline" size={20} color={errors.cardNumber ? C.error : C.text3} style={{ marginRight: 8 }} />
                           <TextInput
                             style={[st.amountInput, { color: C.text1, fontSize: 16 }]}
                             placeholder="4242 4242 4242 4242"
@@ -489,7 +494,7 @@ export default function EmployeeWalletTab() {
                       </View>
                       <View style={{ flexDirection: 'row', gap: 12 }}>
                         <View style={[st.inputSection, { flex: 1 }]}>
-                          <Text style={[st.inputLabel, { color: C.text2 }]}>Expiry</Text>
+                          <Text style={[st.inputLabel, { color: C.text3 }]}>Expiry (MM/YY)</Text>
                           <View style={[st.amountInputWrap, { backgroundColor: C.surface2, borderColor: errors.expiry ? C.error : C.divider }]}>
                             <TextInput
                               style={[st.amountInput, { color: C.text1, fontSize: 16 }]}
@@ -503,7 +508,7 @@ export default function EmployeeWalletTab() {
                           {errors.expiry && <Text style={st.errorText}>{errors.expiry}</Text>}
                         </View>
                         <View style={[st.inputSection, { flex: 1 }]}>
-                          <Text style={[st.inputLabel, { color: C.text2 }]}>CVC</Text>
+                          <Text style={[st.inputLabel, { color: C.text3 }]}>CVC</Text>
                           <View style={[st.amountInputWrap, { backgroundColor: C.surface2, borderColor: errors.cvc ? C.error : C.divider }]}>
                             <TextInput
                               style={[st.amountInput, { color: C.text1, fontSize: 16 }]}
@@ -541,8 +546,10 @@ export default function EmployeeWalletTab() {
                     </View>
                   )}
 
-                  <TouchableOpacity style={[st.withdrawConfirmBtn, { backgroundColor: '#22c55e', marginTop: 24 }]} onPress={handleAddPaymentMethod}>
-                    {isProcessing ? <ActivityIndicator color="#fff" /> : <Text style={st.withdrawConfirmText}>Link Payout Method</Text>}
+                  <TouchableOpacity style={[st.withdrawConfirmBtn, { marginTop: 24, overflow: 'hidden' }]} onPress={handleAddPaymentMethod}>
+                    <LinearGradient colors={['#0ea5e9', '#0284c7']} style={{ flex: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' }}>
+                      {isProcessing ? <ActivityIndicator color="#fff" /> : <Text style={st.withdrawConfirmText}>{cardBrand === 'Visa' || cardBrand === 'Mastercard' ? 'Link Card' : 'Continue'}</Text>}
+                    </LinearGradient>
                   </TouchableOpacity>
                 </>
               ) : (
@@ -560,14 +567,17 @@ export default function EmployeeWalletTab() {
                       maxLength={6}
                     />
                   </View>
-                  <TouchableOpacity style={[st.withdrawConfirmBtn, { backgroundColor: '#22c55e', width: '100%' }]} onPress={handleVerifyOtp}>
-                    {isProcessing ? <ActivityIndicator color="#fff" /> : <Text style={st.withdrawConfirmText}>Verify & Link</Text>}
+                  <TouchableOpacity style={[st.withdrawConfirmBtn, { width: '100%', overflow: 'hidden' }]} onPress={handleVerifyOtp}>
+                    <LinearGradient colors={['#0ea5e9', '#0284c7']} style={{ flex: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' }}>
+                      {isProcessing ? <ActivityIndicator color="#fff" /> : <Text style={st.withdrawConfirmText}>Verify & Link</Text>}
+                    </LinearGradient>
                   </TouchableOpacity>
                 </View>
               )}
             </View>
           </View>
         </KeyboardAvoidingView>
+        </TouchableOpacity>
       </Modal>
 
       {/* MODAL: SUCCESS */}
@@ -625,6 +635,7 @@ const st = StyleSheet.create({
   modalContent: { borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, paddingBottom: 40 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
   modalTitle: { fontSize: 18, fontWeight: '800' },
+  closeBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   modalBody: { marginBottom: 32 },
   inputLabel: { fontSize: 14, fontWeight: '700', marginBottom: 10 },
   amountInputWrap: { flexDirection: 'row', alignItems: 'center', height: 64, borderRadius: 20, borderWidth: 1, paddingHorizontal: 20 },

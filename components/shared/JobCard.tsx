@@ -98,7 +98,7 @@ export function JobCard({
                <Text style={[st.workerName, { color: C.text2 }]}>{job.employee_name}</Text>
              </View>
           ) : (
-             <Text style={[st.awaitingText, { color: C.text3 }]}>Awaiting cleaner</Text>
+             <Text style={[st.awaitingText, { color: C.text3 }]}>Awaiting Cleaner</Text>
           )}
         </View>
 
@@ -110,7 +110,7 @@ export function JobCard({
                 onPress={onClaim}
                 disabled={isClaiming}
               >
-                <Text style={st.primaryBtnText}>{isClaiming ? 'Claiming…' : 'Claim Job'}</Text>
+                <Text style={st.primaryBtnText}>{isClaiming ? 'Applying…' : 'Apply for Task'}</Text>
               </TouchableOpacity>
             )}
             {actionLabel && onAction && (

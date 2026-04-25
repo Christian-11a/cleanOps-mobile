@@ -39,6 +39,7 @@ export default function CustomerWalletTab() {
   const [showAddMoney, setShowAddMoney] = useState(false);
   const [showWithdrawMoney, setShowWithdrawMoney] = useState(false);
   const [showAddPayment, setShowAddPayment] = useState(false);
+  const [showManagePayments, setShowManagePayments] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   
   // Forms
@@ -65,7 +66,8 @@ export default function CustomerWalletTab() {
       setRecentJobs(jobs);
       setPaymentMethods(methods);
     } catch (e) {
-      console.warn('Wallet fetch error:', e);
+      if (__DEV__) console.warn('Wallet fetch error:', e);
+      toast.show('Failed to load wallet data. Pull to refresh.', 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -184,6 +186,28 @@ export default function CustomerWalletTab() {
     } finally {
       setIsProcessing(false);
     }
+  }
+
+  function getBrandColor(brand: string) {
+    if (brand === 'Visa') return '#1d4ed8';
+    if (brand === 'Mastercard') return '#1a1a1a';
+    if (brand === 'Maya') return '#00c300';
+    return '#1a73e8';
+  }
+
+  async function handleSetDefault(id: string) {
+    await setDefaultPaymentMethod(id);
+    await fetchData();
+  }
+
+  function handleRemoveMethod(id: string) {
+    Alert.alert('Remove Method', 'Are you sure you want to remove this payment method?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: async () => {
+        await removePaymentMethod(id);
+        await fetchData();
+      }},
+    ]);
   }
 
   async function handleAddMoney() {
@@ -365,65 +389,6 @@ export default function CustomerWalletTab() {
           </View>
         </View>
 
-        {/* Payment Methods */}
-        <View style={st.section}>
-          <Text style={[st.sectionTitle, { color: C.text1 }]}>Payment Methods</Text>
-          <View style={st.methodList}>
-            {paymentMethods.map(method => (
-              <View 
-                key={method.id} 
-                style={[st.methodCard, { backgroundColor: C.surface, borderColor: C.divider }]}
-              >
-                <TouchableOpacity 
-                  style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
-                  onPress={() => {
-                    if (!method.isDefault) {
-                      setDefaultPaymentMethod(method.id).then(fetchData);
-                    }
-                  }}
-                >
-                  <View style={[st.methodBrandIcon, { backgroundColor: method.brand === 'Visa' ? '#1d4ed8' : (method.brand === 'Mastercard' ? '#1a1a1a' : (method.brand === 'Maya' ? '#00c300' : '#1a73e8')) }]}>
-                    <Text style={st.brandTextShort}>{method.brand.substring(0, 2)}</Text>
-                  </View>
-                  <View style={st.methodInfo}>
-                    <Text style={[st.methodName, { color: C.text1 }]}>
-                      {method.brand} {method.last4 ? `····${method.last4}` : (method.phoneNumber ? `+63 ${method.phoneNumber.slice(-4)}` : '')}
-                    </Text>
-                    <Text style={[st.methodSub, { color: C.text3 }]}>
-                      {method.expiry ? `Expires ${method.expiry}` : 'Linked Account'}
-                    </Text>
-                  </View>
-                  {method.isDefault && (
-                    <View style={st.defaultBadge}>
-                      <Text style={st.defaultBadgeText}>Default</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={st.removeBtn} 
-                  onPress={() => {
-                    Alert.alert('Remove Method', `Are you sure you want to remove your ${method.brand}?`, [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Remove', onPress: () => { removePaymentMethod(method.id).then(fetchData); }, style: 'destructive' }
-                    ]);
-                  }}
-                >
-                  <Ionicons name="trash-outline" size={18} color={C.text3} />
-                </TouchableOpacity>
-              </View>
-            ))}
-            
-            <TouchableOpacity 
-              style={[st.addMethodBtn, { borderColor: C.text3 }]} 
-              onPress={() => setShowAddPayment(true)}
-            >
-              <Ionicons name="add" size={18} color={C.text3} />
-              <Text style={[st.addMethodBtnText, { color: C.text3 }]}>Add Payment Method</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
         {/* Transaction History */}
         <View style={st.section}>
           <Text style={[st.sectionTitle, { color: C.text1 }]}>Transaction History</Text>
@@ -463,7 +428,7 @@ export default function CustomerWalletTab() {
               <View style={st.modalHeader}>
                 <Text style={[st.modalTitle, { color: C.text1 }]}>Add Money</Text>
                 <TouchableOpacity onPress={() => setShowAddMoney(false)} disabled={isProcessing}>
-                  <View style={st.closeBtn}>
+                  <View style={[st.closeBtn, { backgroundColor: C.surface2 }]}>
                     <Ionicons name="close" size={20} color={C.text2} />
                   </View>
                 </TouchableOpacity>
@@ -476,7 +441,7 @@ export default function CustomerWalletTab() {
                       key={amt}
                       style={[
                         st.presetBtn, 
-                        depositAmount === amt ? { backgroundColor: '#e0f2fe', borderColor: C.blue600 } : { backgroundColor: '#f1f5f9', borderColor: 'transparent' }
+                        depositAmount === amt ? { backgroundColor: isDark ? 'rgba(37,99,235,0.15)' : '#e0f2fe', borderColor: C.blue600 } : { backgroundColor: C.surface2, borderColor: 'transparent' }
                       ]}
                       onPress={() => setDepositAmount(amt)}
                     >
@@ -487,7 +452,7 @@ export default function CustomerWalletTab() {
 
                 <View style={st.inputSection}>
                   <Text style={[st.inputLabel, { color: C.text3 }]}>Custom Amount</Text>
-                  <View style={[st.amountInputContainer, { backgroundColor: '#f1f5f9' }]}>
+                  <View style={[st.amountInputContainer, { backgroundColor: C.surface2 }]}>
                     <Text style={st.currencySymbol}>$</Text>
                     <TextInput
                       style={[st.amountInput, { color: C.text1 }]}
@@ -501,22 +466,29 @@ export default function CustomerWalletTab() {
                 </View>
 
                 {defaultMethod ? (
-                  <View style={[st.selectedMethod, { backgroundColor: '#f8fafc', borderColor: C.divider }]}>
-                    <View style={[st.methodBrandIconSmall, { backgroundColor: defaultMethod.brand === 'Visa' ? '#1d4ed8' : '#1a1a1a' }]}>
-                      <Text style={st.brandTextTiny}>{defaultMethod.brand.substring(0, 2)}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[st.methodNameSmall, { color: C.text1 }]}>{defaultMethod.brand} ····{defaultMethod.last4}</Text>
-                      <Text style={[st.methodSubSmall, { color: C.text3 }]}>Expires {defaultMethod.expiry}</Text>
-                    </View>
-                    <Text style={st.defaultLabelSmall}>Default</Text>
-                  </View>
+                  <>
+                    <Text style={[st.inputLabel, { color: C.text3 }]}>Pay with</Text>
+                    <TouchableOpacity
+                      style={[st.methodBtn, { backgroundColor: C.surface2, borderColor: C.divider }]}
+                      onPress={() => setShowManagePayments(true)}
+                    >
+                      <View style={[st.methodBrandIconSmall, { backgroundColor: getBrandColor(defaultMethod.brand) }]}>
+                        <Text style={st.brandTextTiny}>{defaultMethod.brand.substring(0, 2)}</Text>
+                      </View>
+                      <Text style={[st.methodText, { color: C.text1 }]}>
+                        {defaultMethod.brand} {defaultMethod.last4 ? `(**** ${defaultMethod.last4})` : (defaultMethod.phoneNumber ? `(+63 ${defaultMethod.phoneNumber.slice(-4)})` : '')}
+                      </Text>
+                      <Ionicons name="chevron-forward" size={16} color={C.text3} style={{ marginLeft: 'auto' }} />
+                    </TouchableOpacity>
+                  </>
                 ) : (
-                  <TouchableOpacity 
-                    style={st.noMethodLink}
+                  <TouchableOpacity
+                    style={[st.methodBtn, { backgroundColor: C.surface2, borderColor: C.error, borderStyle: 'dashed' }]}
                     onPress={() => { setShowAddMoney(false); setShowAddPayment(true); }}
                   >
-                    <Text style={st.noMethodText}>Add a payment method to continue</Text>
+                    <Ionicons name="add-circle-outline" size={20} color={C.error} />
+                    <Text style={[st.methodText, { color: C.error }]}>Add Payment Method</Text>
+                    <Ionicons name="chevron-forward" size={16} color={C.text3} style={{ marginLeft: 'auto' }} />
                   </TouchableOpacity>
                 )}
 
@@ -554,7 +526,7 @@ export default function CustomerWalletTab() {
               <View style={st.modalHeader}>
                 <Text style={[st.modalTitle, { color: C.text1 }]}>Withdraw Funds</Text>
                 <TouchableOpacity onPress={() => setShowWithdrawMoney(false)} disabled={isProcessing}>
-                  <View style={st.closeBtn}>
+                  <View style={[st.closeBtn, { backgroundColor: C.surface2 }]}>
                     <Ionicons name="close" size={20} color={C.text2} />
                   </View>
                 </TouchableOpacity>
@@ -563,7 +535,7 @@ export default function CustomerWalletTab() {
               <View style={st.modalBody}>
                 <View style={st.inputSection}>
                   <Text style={[st.inputLabel, { color: C.text3 }]}>Withdrawal Amount</Text>
-                  <View style={[st.amountInputContainer, { backgroundColor: '#f1f5f9' }, parseFloat(withdrawAmount) > balance && { borderColor: C.error, borderWidth: 1 }]}>
+                  <View style={[st.amountInputContainer, { backgroundColor: C.surface2 }, parseFloat(withdrawAmount) > balance && { borderColor: C.error, borderWidth: 1 }]}>
                     <Text style={st.currencySymbol}>$</Text>
                     <TextInput
                       style={[st.amountInput, { color: C.text1 }]}
@@ -579,24 +551,33 @@ export default function CustomerWalletTab() {
                       Amount exceeds available balance of ${balance.toFixed(2)}
                     </Text>
                   )}
+                  <Text style={[st.inputLabel, { color: C.text3, fontWeight: '400' }]}>Available: ${balance.toFixed(2)}</Text>
                 </View>
 
                 {defaultMethod ? (
-                  <View style={[st.selectedMethod, { backgroundColor: '#f8fafc', borderColor: C.divider }]}>
-                    <View style={[st.methodBrandIconSmall, { backgroundColor: defaultMethod.brand === 'Visa' ? '#1d4ed8' : '#1a1a1a' }]}>
-                      <Text style={st.brandTextTiny}>{defaultMethod.brand.substring(0, 2)}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[st.methodNameSmall, { color: C.text1 }]}>Withdraw to {defaultMethod.brand} ····{defaultMethod.last4}</Text>
-                      <Text style={[st.methodSubSmall, { color: C.text3 }]}>Funds usually arrive in 1-3 business days</Text>
-                    </View>
-                  </View>
+                  <>
+                    <Text style={[st.inputLabel, { color: C.text3 }]}>Transfer to</Text>
+                    <TouchableOpacity
+                      style={[st.methodBtn, { backgroundColor: C.surface2, borderColor: C.divider }]}
+                      onPress={() => setShowManagePayments(true)}
+                    >
+                      <View style={[st.methodBrandIconSmall, { backgroundColor: getBrandColor(defaultMethod.brand) }]}>
+                        <Text style={st.brandTextTiny}>{defaultMethod.brand.substring(0, 2)}</Text>
+                      </View>
+                      <Text style={[st.methodText, { color: C.text1 }]}>
+                        {defaultMethod.brand} {defaultMethod.last4 ? `(**** ${defaultMethod.last4})` : (defaultMethod.phoneNumber ? `(+63 ${defaultMethod.phoneNumber.slice(-4)})` : '')}
+                      </Text>
+                      <Ionicons name="chevron-forward" size={16} color={C.text3} style={{ marginLeft: 'auto' }} />
+                    </TouchableOpacity>
+                  </>
                 ) : (
-                  <TouchableOpacity 
-                    style={st.noMethodLink}
+                  <TouchableOpacity
+                    style={[st.methodBtn, { backgroundColor: C.surface2, borderColor: C.error, borderStyle: 'dashed' }]}
                     onPress={() => { setShowWithdrawMoney(false); setShowAddPayment(true); }}
                   >
-                    <Text style={st.noMethodText}>Add a withdrawal destination</Text>
+                    <Ionicons name="add-circle-outline" size={20} color={C.error} />
+                    <Text style={[st.methodText, { color: C.error }]}>Add Payment Method</Text>
+                    <Ionicons name="chevron-forward" size={16} color={C.text3} style={{ marginLeft: 'auto' }} />
                   </TouchableOpacity>
                 )}
 
@@ -619,11 +600,54 @@ export default function CustomerWalletTab() {
         </TouchableOpacity>
       </Modal>
 
+      {/* MODAL: MANAGE PAYMENTS */}
+      <Modal visible={showManagePayments} animationType="slide" transparent>
+        <TouchableOpacity style={st.modalOverlay} activeOpacity={1} onPress={() => setShowManagePayments(false)}>
+          <View style={[st.modalSheet, { backgroundColor: C.surface }]} onStartShouldSetResponder={() => true}>
+            <View style={st.modalHeader}>
+              <Text style={[st.modalTitle, { color: C.text1 }]}>Payment Methods</Text>
+              <TouchableOpacity onPress={() => setShowManagePayments(false)}>
+                <View style={[st.closeBtn, { backgroundColor: C.surface2 }]}>
+                  <Ionicons name="close" size={20} color={C.text2} />
+                </View>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 400 }} contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 32, gap: 12 }} showsVerticalScrollIndicator={false}>
+              {paymentMethods.map(m => (
+                <View key={m.id} style={[st.methodRow, { backgroundColor: C.surface2, borderColor: m.isDefault ? C.blue600 : C.divider }]}>
+                  <TouchableOpacity style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 }} onPress={() => handleSetDefault(m.id)}>
+                    <View style={[st.methodBrandIconSmall, { backgroundColor: getBrandColor(m.brand) }]}>
+                      <Text style={st.brandTextTiny}>{m.brand.substring(0, 2)}</Text>
+                    </View>
+                    <View>
+                      <Text style={[st.methodText, { color: C.text1 }]}>
+                        {m.brand} {m.last4 ? `(**** ${m.last4})` : (m.phoneNumber ? `(+63 ${m.phoneNumber.slice(-4)})` : '')}
+                      </Text>
+                      {m.isDefault && <Text style={{ fontSize: 10, color: C.blue600, fontWeight: '700' }}>DEFAULT</Text>}
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleRemoveMethod(m.id)}>
+                    <Ionicons name="trash-outline" size={18} color={C.error} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              <TouchableOpacity
+                style={[st.methodRow, { borderStyle: 'dashed', borderColor: C.blue600, justifyContent: 'center' }]}
+                onPress={() => { setShowManagePayments(false); setShowAddPayment(true); }}
+              >
+                <Ionicons name="add-circle-outline" size={20} color={C.blue600} />
+                <Text style={[st.methodText, { color: C.blue600 }]}>Add New Payment Method</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* MODAL: ADD PAYMENT METHOD */}
       <Modal visible={showAddPayment} animationType="slide" transparent>
-        <TouchableOpacity 
-          style={st.modalOverlay} 
-          activeOpacity={1} 
+        <TouchableOpacity
+          style={st.modalOverlay}
+          activeOpacity={1}
           onPress={() => !isProcessing && setShowAddPayment(false)}
         >
           <KeyboardAvoidingView 
@@ -636,7 +660,7 @@ export default function CustomerWalletTab() {
                   {paymentFlow === 'otp' ? `Link ${cardBrand}` : 'Add Payment Method'}
                 </Text>
                 <TouchableOpacity onPress={() => setShowAddPayment(false)} disabled={isProcessing}>
-                  <View style={st.closeBtn}>
+                  <View style={[st.closeBtn, { backgroundColor: C.surface2 }]}>
                     <Ionicons name="close" size={20} color={C.text2} />
                   </View>
                 </TouchableOpacity>
@@ -650,7 +674,7 @@ export default function CustomerWalletTab() {
                       {(['Visa', 'Mastercard', 'Maya', 'GCash'] as PaymentBrand[]).map(b => (
                         <TouchableOpacity 
                           key={b}
-                          style={[st.brandOption, cardBrand === b && { borderColor: C.blue600, backgroundColor: '#f0f9ff' }]}
+                          style={[st.brandOption, cardBrand === b && { borderColor: C.blue600, backgroundColor: isDark ? 'rgba(37,99,235,0.1)' : '#f0f9ff' }]}
                           onPress={() => { setCardBrand(b); setErrors({}); }}
                         >
                           <Text style={[st.brandOptionText, { color: cardBrand === b ? C.blue600 : C.text2 }]}>{b}</Text>
@@ -662,8 +686,22 @@ export default function CustomerWalletTab() {
                       // CARD FLOW
                       <>
                         <View style={st.inputSection}>
+                          <Text style={[st.inputLabel, { color: C.text3 }]}>Cardholder Name</Text>
+                          <View style={[st.amountInputContainer, { backgroundColor: C.surface2 }, errors.cardholderName && { borderColor: C.error, borderWidth: 1 }]}>
+                            <TextInput
+                              style={[st.amountInput, { color: C.text1, fontSize: 16 }]}
+                              placeholder="John Doe"
+                              placeholderTextColor={C.text3}
+                              value={cardholderName}
+                              onChangeText={val => { setCardholderName(val); setErrors(prev => ({ ...prev, cardholderName: '' })); }}
+                            />
+                          </View>
+                          {errors.cardholderName && <Text style={{ color: C.error, fontSize: 11, marginTop: 4 }}>{errors.cardholderName}</Text>}
+                        </View>
+
+                        <View style={st.inputSection}>
                           <Text style={[st.inputLabel, { color: C.text3 }]}>Card Number</Text>
-                          <View style={[st.amountInputContainer, { backgroundColor: '#f1f5f9' }, errors.cardNumber && { borderColor: C.error, borderWidth: 1 }]}>
+                          <View style={[st.amountInputContainer, { backgroundColor: C.surface2 }, errors.cardNumber && { borderColor: C.error, borderWidth: 1 }]}>
                             <Ionicons name="card-outline" size={20} color={errors.cardNumber ? C.error : C.text3} style={{ marginRight: 8 }} />
                             <TextInput
                               style={[st.amountInput, { color: C.text1, fontSize: 16 }]}
@@ -681,7 +719,7 @@ export default function CustomerWalletTab() {
                         <View style={{ flexDirection: 'row', gap: 12 }}>
                           <View style={[st.inputSection, { flex: 1 }]}>
                             <Text style={[st.inputLabel, { color: C.text3 }]}>Expiry (MM/YY)</Text>
-                            <View style={[st.amountInputContainer, { backgroundColor: '#f1f5f9' }, errors.expiry && { borderColor: C.error, borderWidth: 1 }]}>
+                            <View style={[st.amountInputContainer, { backgroundColor: C.surface2 }, errors.expiry && { borderColor: C.error, borderWidth: 1 }]}>
                               <TextInput
                                 style={[st.amountInput, { color: C.text1, fontSize: 16 }]}
                                 placeholder="12/28"
@@ -695,7 +733,7 @@ export default function CustomerWalletTab() {
                           </View>
                           <View style={[st.inputSection, { flex: 1 }]}>
                             <Text style={[st.inputLabel, { color: C.text3 }]}>CVC</Text>
-                            <View style={[st.amountInputContainer, { backgroundColor: '#f1f5f9' }, errors.cvc && { borderColor: C.error, borderWidth: 1 }]}>
+                            <View style={[st.amountInputContainer, { backgroundColor: C.surface2 }, errors.cvc && { borderColor: C.error, borderWidth: 1 }]}>
                               <TextInput
                                 style={[st.amountInput, { color: C.text1, fontSize: 16 }]}
                                 placeholder="123"
@@ -710,26 +748,12 @@ export default function CustomerWalletTab() {
                             {errors.cvc && <Text style={{ color: C.error, fontSize: 11, marginTop: 4 }}>{errors.cvc}</Text>}
                           </View>
                         </View>
-
-                        <View style={st.inputSection}>
-                          <Text style={[st.inputLabel, { color: C.text3 }]}>Cardholder Name</Text>
-                          <View style={[st.amountInputContainer, { backgroundColor: '#f1f5f9' }, errors.cardholderName && { borderColor: C.error, borderWidth: 1 }]}>
-                            <TextInput
-                              style={[st.amountInput, { color: C.text1, fontSize: 16 }]}
-                              placeholder="John Doe"
-                              placeholderTextColor={C.text3}
-                              value={cardholderName}
-                              onChangeText={val => { setCardholderName(val); setErrors(prev => ({ ...prev, cardholderName: '' })); }}
-                            />
-                          </View>
-                          {errors.cardholderName && <Text style={{ color: C.error, fontSize: 11, marginTop: 4 }}>{errors.cardholderName}</Text>}
-                        </View>
                       </>
                     ) : (
                       // E-WALLET FLOW
                       <View style={st.inputSection}>
                         <Text style={[st.inputLabel, { color: C.text3 }]}>{cardBrand} Mobile Number</Text>
-                        <View style={[st.amountInputContainer, { backgroundColor: '#f1f5f9' }, errors.phoneNumber && { borderColor: C.error, borderWidth: 1 }]}>
+                        <View style={[st.amountInputContainer, { backgroundColor: C.surface2 }, errors.phoneNumber && { borderColor: C.error, borderWidth: 1 }]}>
                           <Text style={{ fontSize: 16, fontWeight: '700', color: C.text1, marginRight: 8 }}>+63</Text>
                           <TextInput
                             style={[st.amountInput, { color: C.text1, fontSize: 16 }]}
@@ -765,7 +789,7 @@ export default function CustomerWalletTab() {
                   // OTP FLOW
                   <View style={{ gap: 20 }}>
                     <View style={{ alignItems: 'center', gap: 8 }}>
-                      <View style={[st.otpIconCircle, { backgroundColor: '#f0f9ff' }]}>
+                      <View style={[st.otpIconCircle, { backgroundColor: isDark ? '#0c4a6e30' : '#f0f9ff' }]}>
                         <Ionicons name="chatbubble-ellipses-outline" size={32} color={C.blue600} />
                       </View>
                       <Text style={[st.otpTitle, { color: C.text1 }]}>Verify your number</Text>
@@ -775,7 +799,7 @@ export default function CustomerWalletTab() {
                     </View>
 
                     <View style={st.inputSection}>
-                      <View style={[st.amountInputContainer, { backgroundColor: '#f1f5f9', justifyContent: 'center' }, errors.otp && { borderColor: C.error, borderWidth: 1 }]}>
+                      <View style={[st.amountInputContainer, { backgroundColor: C.surface2, justifyContent: 'center' }, errors.otp && { borderColor: C.error, borderWidth: 1 }]}>
                         <TextInput
                           style={[st.amountInput, { color: C.text1, fontSize: 24, letterSpacing: 12, textAlign: 'center' }]}
                           placeholder="000000"
@@ -1186,6 +1210,26 @@ const st = StyleSheet.create({
     padding: 12,
     borderRadius: 16,
     borderWidth: 1,
+    gap: 12,
+  },
+  methodBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 12,
+  },
+  methodText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  methodRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1.5,
     gap: 12,
   },
   methodBrandIconSmall: {

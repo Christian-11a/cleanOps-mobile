@@ -138,7 +138,11 @@ export default function SignupScreen() {
       await signUp({ email, password, fullName, phoneNumber, role });
     } catch (err: any) {
       const msg: string = err.message ?? 'Sign up failed.';
-      if (msg.toLowerCase().includes('email')) {
+      const lowerMsg = msg.toLowerCase();
+      
+      if (lowerMsg.includes('already registered') || lowerMsg.includes('already exists') || lowerMsg.includes('email taken')) {
+        setErrors((p) => ({ ...p, email: 'Email already registered or used' }));
+      } else if (lowerMsg.includes('email')) {
         setErrors((p) => ({ ...p, email: msg }));
       } else {
         setErrors((p) => ({ ...p, password: msg }));
@@ -149,7 +153,7 @@ export default function SignupScreen() {
   }
 
   return (
-    <View style={[st.container, { backgroundColor: '#f0f4f8' }]}>
+    <View style={[st.container, { backgroundColor: C.bg }]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={st.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} bounces={false}>
 
@@ -174,30 +178,30 @@ export default function SignupScreen() {
           <View style={st.formContainer}>
             {/* Role Selection */}
             <View style={st.roleSection}>
-              <Text style={[st.label, { color: '#62748e' }]}>I AM A...</Text>
+              <Text style={[st.label, { color: C.text3 }]}>I AM A...</Text>
               <View style={st.roleGrid}>
                 <TouchableOpacity 
-                  style={[st.roleCard, role === 'customer' && st.roleCardActive]} 
+                  style={[st.roleCard, { backgroundColor: C.surface, borderColor: role === 'customer' ? C.blue600 : C.divider }, role === 'customer' && st.roleCardActive]} 
                   onPress={() => setRole('customer')}
                   activeOpacity={0.8}
                 >
-                  <View style={[st.roleIconBox, { backgroundColor: role === 'customer' ? '#0284c7' : '#f1f5f9' }]}>
-                    <Ionicons name="person" size={18} color={role === 'customer' ? '#fff' : '#64748b'} />
+                  <View style={[st.roleIconBox, { backgroundColor: role === 'customer' ? C.blue600 : C.surface2 }]}>
+                    <Ionicons name="person" size={18} color={role === 'customer' ? '#fff' : C.text3} />
                   </View>
-                  <Text style={[st.roleCardTitle, { color: role === 'customer' ? '#0284c7' : '#0f172a' }]}>Customer</Text>
-                  <Text style={st.roleCardSub}>Post cleaning jobs</Text>
+                  <Text style={[st.roleCardTitle, { color: role === 'customer' ? C.blue600 : C.text1 }]}>Customer</Text>
+                  <Text style={[st.roleCardSub, { color: C.text3 }]}>Post cleaning jobs</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity 
-                  style={[st.roleCard, role === 'employee' && st.roleCardActive]} 
+                  style={[st.roleCard, { backgroundColor: C.surface, borderColor: role === 'employee' ? C.blue600 : C.divider }, role === 'employee' && st.roleCardActive]} 
                   onPress={() => setRole('employee')}
                   activeOpacity={0.8}
                 >
-                  <View style={[st.roleIconBox, { backgroundColor: role === 'employee' ? '#0284c7' : '#f1f5f9' }]}>
-                    <Ionicons name="briefcase" size={18} color={role === 'employee' ? '#fff' : '#64748b'} />
+                  <View style={[st.roleIconBox, { backgroundColor: role === 'employee' ? C.blue600 : C.surface2 }]}>
+                    <Ionicons name="briefcase" size={18} color={role === 'employee' ? '#fff' : C.text3} />
                   </View>
-                  <Text style={[st.roleCardTitle, { color: role === 'employee' ? '#0284c7' : '#0f172a' }]}>Cleaner</Text>
-                  <Text style={st.roleCardSub}>Find & claim jobs</Text>
+                  <Text style={[st.roleCardTitle, { color: role === 'employee' ? C.blue600 : C.text1 }]}>Cleaner</Text>
+                  <Text style={[st.roleCardSub, { color: C.text3 }]}>Find & claim jobs</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -206,12 +210,12 @@ export default function SignupScreen() {
               {/* Split Name Fields */}
               <View style={st.row}>
                 <View style={[st.field, { flex: 1 }]}>
-                  <Text style={[st.label, { color: '#62748e' }]}>First Name</Text>
-                  <View style={[st.inputRow, { borderColor: errors.firstName && touched.firstName ? '#ef4444' : '#e2e8f0', backgroundColor: '#fff' }]}>
+                  <Text style={[st.label, { color: C.text3 }]}>First Name</Text>
+                  <View style={[st.inputRow, { borderColor: errors.firstName && touched.firstName ? '#ef4444' : C.divider, backgroundColor: C.surface }]}>
                     <TextInput
-                      style={[st.input, { color: '#0f172b' }]}
+                      style={[st.input, { color: C.text1 }]}
                       placeholder="Alex"
-                      placeholderTextColor="rgba(15,23,42,0.5)"
+                      placeholderTextColor={C.text3}
                       value={firstName}
                       onChangeText={(v) => { setFirstName(v); if (errors.firstName) validateField('firstName', v); }}
                       onBlur={() => { setTouched(p => ({...p, firstName: true})); validateField('firstName', firstName); }}
@@ -221,12 +225,12 @@ export default function SignupScreen() {
                   {!!errors.firstName && touched.firstName && <Text style={[st.errorText, { color: '#ef4444' }]}>{errors.firstName}</Text>}
                 </View>
                 <View style={[st.field, { flex: 1 }]}>
-                  <Text style={[st.label, { color: '#62748e' }]}>Last Name</Text>
-                  <View style={[st.inputRow, { borderColor: errors.lastName && touched.lastName ? '#ef4444' : '#e2e8f0', backgroundColor: '#fff' }]}>
+                  <Text style={[st.label, { color: C.text3 }]}>Last Name</Text>
+                  <View style={[st.inputRow, { borderColor: errors.lastName && touched.lastName ? '#ef4444' : C.divider, backgroundColor: C.surface }]}>
                     <TextInput
-                      style={[st.input, { color: '#0f172b' }]}
+                      style={[st.input, { color: C.text1 }]}
                       placeholder="Chen"
-                      placeholderTextColor="rgba(15,23,42,0.5)"
+                      placeholderTextColor={C.text3}
                       value={lastName}
                       onChangeText={(v) => { setLastName(v); if (errors.lastName) validateField('lastName', v); }}
                       onBlur={() => { setTouched(p => ({...p, lastName: true})); validateField('lastName', lastName); }}
@@ -239,18 +243,17 @@ export default function SignupScreen() {
 
               {/* Email */}
               <View style={st.field}>
-                <Text style={[st.label, { color: '#62748e' }]}>Email Address</Text>
-                <View style={[st.inputRow, { borderColor: errors.email && touched.email ? '#ef4444' : '#e2e8f0', backgroundColor: '#fff' }]}>
+                <Text style={[st.label, { color: C.text3 }]}>Email Address</Text>
+                <View style={[st.inputRow, { borderColor: errors.email && touched.email ? '#ef4444' : C.divider, backgroundColor: C.surface }]}>
                   <TextInput
-                    style={[st.input, { color: '#0f172b' }]}
+                    style={[st.input, { color: C.text1 }]}
                     placeholder="you@example.com"
-                    placeholderTextColor="rgba(15,23,42,0.5)"
+                    placeholderTextColor={C.text3}
                     value={email}
                     onChangeText={(v) => { setEmail(v); if (errors.email) validateField('email', v); }}
                     onBlur={() => { setTouched(p => ({...p, email: true})); validateField('email', email); }}
                     keyboardType="email-address"
                     autoCapitalize="none"
-                    autoCorrect={false}
                   />
                 </View>
                 {!!errors.email && touched.email && <Text style={[st.errorText, { color: '#ef4444' }]}>{errors.email}</Text>}
@@ -258,12 +261,12 @@ export default function SignupScreen() {
 
               {/* Phone Number */}
               <View style={st.field}>
-                <Text style={[st.label, { color: '#62748e' }]}>Phone Number</Text>
-                <View style={[st.inputRow, { borderColor: errors.phone && touched.phone ? '#ef4444' : '#e2e8f0', backgroundColor: '#fff' }]}>
+                <Text style={[st.label, { color: C.text3 }]}>Phone Number</Text>
+                <View style={[st.inputRow, { borderColor: errors.phone && touched.phone ? '#ef4444' : C.divider, backgroundColor: C.surface }]}>
                   <TextInput
-                    style={[st.input, { color: '#0f172b' }]}
+                    style={[st.input, { color: C.text1 }]}
                     placeholder="+63 9xx xxx xxxx"
-                    placeholderTextColor="rgba(15,23,42,0.5)"
+                    placeholderTextColor={C.text3}
                     value={phoneNumber}
                     onChangeText={handlePhoneChange}
                     onBlur={() => { setTouched(p => ({...p, phone: true})); validateField('phone', phoneNumber); }}
@@ -276,12 +279,12 @@ export default function SignupScreen() {
 
               {/* Password */}
               <View style={st.field}>
-                <Text style={[st.label, { color: '#62748e' }]}>Password</Text>
-                <View style={[st.inputRow, { borderColor: errors.password && touched.password ? '#ef4444' : '#e2e8f0', backgroundColor: '#fff' }]}>
+                <Text style={[st.label, { color: C.text3 }]}>Password</Text>
+                <View style={[st.inputRow, { borderColor: errors.password && touched.password ? '#ef4444' : C.divider, backgroundColor: C.surface }]}>
                   <TextInput
-                    style={[st.input, { color: '#0f172b' }]}
+                    style={[st.input, { color: C.text1 }]}
                     placeholder="••••••••"
-                    placeholderTextColor="rgba(15,23,42,0.5)"
+                    placeholderTextColor={C.text3}
                     value={password}
                     onChangeText={(v) => { setPassword(v); if (errors.password) validateField('password', v); }}
                     onBlur={() => { setTouched(p => ({...p, password: true})); validateField('password', password); }}
@@ -289,7 +292,7 @@ export default function SignupScreen() {
                     autoCapitalize="none"
                   />
                   <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={st.eyeIcon}>
-                    <Ionicons name={showPassword ? 'eye-outline' : 'eye-off-outline'} size={18} color="rgba(15,23,42,0.5)" />
+                    <Ionicons name={showPassword ? 'eye-outline' : 'eye-off-outline'} size={18} color={C.text3} />
                   </TouchableOpacity>
                 </View>
 
@@ -298,7 +301,7 @@ export default function SignupScreen() {
                   <View style={st.strengthRow}>
                     <View style={st.strengthBars}>
                       {[0, 1, 2].map((i) => (
-                        <View key={i} style={[st.strengthBar, { backgroundColor: '#e2e8f0' }, i < pwStrength.bars && { backgroundColor: pwStrength.color }]} />
+                        <View key={i} style={[st.strengthBar, { backgroundColor: C.divider }, i < pwStrength.bars && { backgroundColor: pwStrength.color }]} />
                       ))}
                     </View>
                     <Text style={[st.strengthLabel, { color: pwStrength.color }]}>{pwStrength.label}</Text>
@@ -326,9 +329,9 @@ export default function SignupScreen() {
               </TouchableOpacity>
 
               <View style={st.footer}>
-                <Text style={[st.footerText, { color: '#90a1b9' }]}>Already have an account? </Text>
+                <Text style={[st.footerText, { color: C.text3 }]}>Already have an account? </Text>
                 <TouchableOpacity onPress={() => router.push('/login')}>
-                  <Text style={[st.footerLink, { color: '#0284c7' }]}>Sign In</Text>
+                  <Text style={[st.footerLink, { color: C.blue600 }]}>Sign In</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -387,16 +390,13 @@ const st = StyleSheet.create({
   },
   roleCard: {
     flex: 1,
-    backgroundColor: '#fff',
     borderWidth: 2,
-    borderColor: '#e2e8f0',
     borderRadius: 16,
     padding: 16,
     height: 118,
   },
   roleCardActive: {
     borderColor: '#0284c7',
-    backgroundColor: '#e0f2fe',
   },
   roleIconBox: {
     width: 36,
@@ -413,7 +413,6 @@ const st = StyleSheet.create({
   },
   roleCardSub: {
     fontSize: 12,
-    color: '#90a1b9',
     fontWeight: '500',
   },
 

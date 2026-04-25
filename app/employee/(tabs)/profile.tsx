@@ -39,6 +39,7 @@ export default function EmployeeProfileScreen() {
     { id: 'security',  label: 'Privacy & Security', sub: 'Password and data',    icon: 'lock-closed-outline', route: '/employee/profile/security' },
     { id: 'alerts',    label: 'Alert Settings',  sub: 'Job dispatch alerts',   icon: 'notifications-outline', route: '/employee/profile/alerts' },
     { id: 'hours',     label: 'Availability',    sub: 'Set your active hours', icon: 'time-outline',      route: '/employee/profile/hours' },
+    { id: 'settings',  label: 'App Settings',    sub: 'Theme and preferences', icon: 'settings-outline', route: '/employee/profile/settings' },
     { id: 'support',   label: 'Help & Support',  sub: 'FAQs and contact',      icon: 'help-circle-outline', route: '/employee/profile/support' },
   ];
 

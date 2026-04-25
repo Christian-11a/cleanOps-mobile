@@ -60,8 +60,16 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await signIn(email.trim().toLowerCase(), password);
+      // Success is handled by the auth state listener in _layout.tsx
+      toast.show('Welcome back!');
     } catch (err: any) {
-      setErrors((prev) => ({ ...prev, password: err.message ?? 'Incorrect email or password.' }));
+      if (__DEV__) console.warn('Login error:', err);
+      let msg = 'Incorrect email or password.';
+      if (err.message === 'Invalid login credentials') msg = 'Invalid email or password.';
+      else if (err.message) msg = err.message;
+      
+      setErrors((prev) => ({ ...prev, password: msg }));
+      toast.show(msg);
     } finally {
       setLoading(false);
     }
@@ -84,7 +92,7 @@ export default function LoginScreen() {
   }
 
   return (
-    <View style={[st.container, { backgroundColor: '#f0f4f8' }]}>
+    <View style={[st.container, { backgroundColor: C.bg }]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={st.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} bounces={false}>
           
@@ -132,19 +140,19 @@ export default function LoginScreen() {
           {/* Form Section */}
           <View style={st.formContainer}>
             <View style={st.titleContainer}>
-              <Text style={[st.title, { color: '#0f172b' }]}>Sign in</Text>
-              <Text style={[st.sub, { color: '#62748e' }]}>Welcome back — enter your credentials</Text>
+              <Text style={[st.title, { color: C.text1 }]}>Sign in</Text>
+              <Text style={[st.sub, { color: C.text3 }]}>Welcome back — enter your credentials</Text>
             </View>
 
             <View style={st.form}>
               {/* Email */}
               <View style={st.field}>
-                <Text style={[st.label, { color: '#62748e' }]}>Email address</Text>
-                <View style={[st.inputRow, { borderColor: errors.email && touched.email ? '#ef4444' : '#e2e8f0', backgroundColor: '#fff' }]}>
+                <Text style={[st.label, { color: C.text3 }]}>Email address</Text>
+                <View style={[st.inputRow, { borderColor: errors.email && touched.email ? '#ef4444' : C.divider, backgroundColor: C.surface }]}>
                   <TextInput
-                    style={[st.input, { color: '#0f172b' }]}
+                    style={[st.input, { color: C.text1 }]}
                     placeholder="you@example.com"
-                    placeholderTextColor="rgba(15,23,42,0.5)"
+                    placeholderTextColor={C.text3}
                     value={email}
                     onChangeText={(v) => { setEmail(v); if (errors.email) validateField('email', v); }}
                     onBlur={() => { setTouched(p => ({...p, email: true})); validateField('email', email); }}
@@ -159,16 +167,16 @@ export default function LoginScreen() {
               {/* Password */}
               <View style={st.field}>
                 <View style={st.labelRow}>
-                  <Text style={[st.label, { color: '#62748e' }]}>Password</Text>
+                  <Text style={[st.label, { color: C.text3 }]}>Password</Text>
                   <TouchableOpacity onPress={() => { setForgotEmail(email); setForgotEmailErr(''); setForgotVisible(true); }}>
-                    <Text style={[st.forgot, { color: '#0284c7' }]}>Forgot password?</Text>
+                    <Text style={[st.forgot, { color: C.blue600 }]}>Forgot password?</Text>
                   </TouchableOpacity>
                 </View>
-                <View style={[st.inputRow, { borderColor: errors.password && touched.password ? '#ef4444' : '#e2e8f0', backgroundColor: '#fff' }]}>
+                <View style={[st.inputRow, { borderColor: errors.password && touched.password ? '#ef4444' : C.divider, backgroundColor: C.surface }]}>
                   <TextInput
-                    style={[st.input, { color: '#0f172b' }]}
+                    style={[st.input, { color: C.text1 }]}
                     placeholder="••••••••"
-                    placeholderTextColor="rgba(15,23,42,0.5)"
+                    placeholderTextColor={C.text3}
                     value={password}
                     onChangeText={(v) => { setPassword(v); if (errors.password) validateField('password', v); }}
                     onBlur={() => { setTouched(p => ({...p, password: true})); validateField('password', password); }}
@@ -176,7 +184,7 @@ export default function LoginScreen() {
                     autoCapitalize="none"
                   />
                   <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={st.eyeIcon}>
-                    <Ionicons name={showPassword ? 'eye-outline' : 'eye-off-outline'} size={18} color="rgba(15,23,42,0.5)" />
+                    <Ionicons name={showPassword ? 'eye-outline' : 'eye-off-outline'} size={18} color={C.text3} />
                   </TouchableOpacity>
                 </View>
                 {!!errors.password && touched.password && <Text style={[st.errorText, { color: '#ef4444' }]}>{errors.password}</Text>}
@@ -201,17 +209,17 @@ export default function LoginScreen() {
               </TouchableOpacity>
 
               <View style={st.divider}>
-                <View style={[st.dividerLine, { backgroundColor: '#e2e8f0' }]} />
-                <Text style={[st.dividerText, { color: '#90a1b9' }]}>don't have an account?</Text>
-                <View style={[st.dividerLine, { backgroundColor: '#e2e8f0' }]} />
+                <View style={[st.dividerLine, { backgroundColor: C.divider }]} />
+                <Text style={[st.dividerText, { color: C.text3 }]}>don't have an account?</Text>
+                <View style={[st.dividerLine, { backgroundColor: C.divider }]} />
               </View>
 
               <TouchableOpacity
-                style={st.createBtn}
+                style={[st.createBtn, { backgroundColor: C.surface, borderColor: C.divider }]}
                 onPress={() => router.push('/signup')}
                 activeOpacity={0.85}
               >
-                <Text style={st.createText}>Create an Account</Text>
+                <Text style={[st.createText, { color: C.text3 }]}>Create an Account</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -221,23 +229,23 @@ export default function LoginScreen() {
       {/* Forgot Password Modal */}
       <Modal visible={forgotVisible} animationType="slide" transparent>
         <KeyboardAvoidingView style={st.modalOverlay} behavior="padding">
-          <View style={[st.modalSheet, { backgroundColor: '#fff' }]}>
-            <View style={[st.modalHeader, { borderBottomColor: '#e2e8f0' }]}>
-              <Text style={[st.modalTitle, { color: '#0f172b' }]}>Reset Password</Text>
+          <View style={[st.modalSheet, { backgroundColor: C.surface }]}>
+            <View style={[st.modalHeader, { borderBottomColor: C.divider }]}>
+              <Text style={[st.modalTitle, { color: C.text1 }]}>Reset Password</Text>
               <TouchableOpacity onPress={() => setForgotVisible(false)}>
-                <Ionicons name="close" size={22} color="#62748e" />
+                <Ionicons name="close" size={22} color={C.text2} />
               </TouchableOpacity>
             </View>
             <View style={st.modalBody}>
-              <Text style={[st.modalDesc, { color: '#62748e' }]}>
+              <Text style={[st.modalDesc, { color: C.text3 }]}>
                 Enter your email and we'll send you a link to reset your password.
               </Text>
-              <Text style={[st.label, { color: '#62748e', marginTop: 12 }]}>EMAIL</Text>
-              <View style={[st.inputRow, { borderColor: forgotEmailErr ? '#ef4444' : '#e2e8f0', backgroundColor: '#fff' }]}>
+              <Text style={[st.label, { color: C.text2, marginTop: 12 }]}>EMAIL</Text>
+              <View style={[st.inputRow, { borderColor: forgotEmailErr ? '#ef4444' : C.divider, backgroundColor: C.bg }]}>
                 <TextInput
-                  style={[st.input, { color: '#0f172b' }]}
+                  style={[st.input, { color: C.text1 }]}
                   placeholder="you@example.com"
-                  placeholderTextColor="rgba(15,23,42,0.5)"
+                  placeholderTextColor={C.text3}
                   value={forgotEmail}
                   onChangeText={(v) => { setForgotEmail(v); if (forgotEmailErr) setForgotEmailErr(''); }}
                   keyboardType="email-address"
@@ -405,15 +413,12 @@ const st = StyleSheet.create({
     height: 54,
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: '#bae6fd',
-    backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
   },
   createText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#0284c7',
   },
 
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },

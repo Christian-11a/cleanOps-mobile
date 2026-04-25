@@ -7,12 +7,15 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { getOpenJobs, applyForJob } from '@/actions/jobs';
+import * as Linking from 'expo-linking';
+import { getOpenJobs, applyForJob, getEmployeeApplications } from '@/actions/jobs';
 import { useTheme } from '@/lib/themeContext';
 import { useAuth } from '@/lib/authContext';
 import { useToast } from '@/lib/toastContext';
-import { formatTimeAgo } from '@/lib/utils';
+import { useNotifications } from '@/lib/notificationContext';
+import { formatTimeAgo, calculateDistance } from '@/lib/utils';
 import type { Job } from '@/types';
+import * as Location from 'expo-location';
 
 const { width } = Dimensions.get('window');
 
@@ -22,18 +25,39 @@ export default function EmployeeFeedScreen() {
   const router = useRouter();
   const { colors: C, isDark } = useTheme();
   const { profile } = useAuth();
+  const { unreadCount } = useNotifications();
   const insets = useSafeAreaInsets();
   const toast = useToast();
   
-  const [jobs,       setJobs]       = useState<Job[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [applying,   setClaiming]   = useState<string | null>(null);
-  const [filter,     setFilter]     = useState<Priority>('ALL');
+  const [jobs,           setJobs]           = useState<Job[]>([]);
+  const [appliedJobIds,  setAppliedJobIds]  = useState<string[]>([]);
+  const [loading,        setLoading]        = useState(true);
+  const [refreshing,     setRefreshing]     = useState(false);
+  const [applying,       setClaiming]       = useState<string | null>(null);
+  const [filter,         setFilter]         = useState<Priority>('ALL');
+  const [userLoc,        setUserLoc]        = useState<{lat: number, lng: number} | null>(null);
+  const [locStatus,      setLocStatus]      = useState<Location.PermissionStatus | null>(null);
 
   const fetchJobs = useCallback(async () => {
-    try { setJobs(await getOpenJobs()); }
-    catch (e) { console.warn(e); }
+    try { 
+      // Get user location for distance calculation
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      setLocStatus(status);
+      if (status === 'granted') {
+        const loc = await Location.getCurrentPositionAsync({});
+        setUserLoc({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+      }
+
+      // Fetch open jobs and user's applications in parallel
+      const [allOpen, appliedIds] = await Promise.all([
+        getOpenJobs(),
+        getEmployeeApplications()
+      ]);
+
+      setJobs(allOpen); 
+      setAppliedJobIds(appliedIds);
+    }
+    catch (e) { if (__DEV__) console.warn(e); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -42,29 +66,32 @@ export default function EmployeeFeedScreen() {
   const firstName = profile?.full_name?.split(' ')[0] ?? 'Cleaner';
   
   const filteredJobs = useMemo(() => {
-    if (filter === 'ALL') return jobs;
-    if (filter === 'URGENT') return jobs.filter(j => j.urgency === 'HIGH'); 
-    if (filter === 'MEDIUM') return jobs.filter(j => j.urgency === 'NORMAL');
-    return jobs.filter(j => j.urgency === 'LOW');
-  }, [jobs, filter]);
+    // Filter out jobs already applied for
+    const available = jobs.filter(j => !appliedJobIds.includes(j.id));
+    
+    if (filter === 'ALL') return available;
+    if (filter === 'URGENT') return available.filter(j => j.urgency === 'HIGH'); 
+    if (filter === 'MEDIUM') return available.filter(j => j.urgency === 'NORMAL');
+    return available.filter(j => j.urgency === 'LOW');
+  }, [jobs, appliedJobIds, filter]);
 
   const stats = {
-    open: jobs.length,
-    urgent: jobs.filter(j => j.urgency === 'HIGH').length,
-    pool: jobs.reduce((s, j) => s + Number(j.price_amount), 0)
+    open: filteredJobs.length,
+    urgent: filteredJobs.filter(j => j.urgency === 'HIGH').length,
+    pool: filteredJobs.reduce((s, j) => s + Number(j.price_amount), 0)
   };
 
   async function handleClaim(jobId: string) {
     Alert.alert(
-      'Apply for Job?',
-      'The customer will review your profile and approve before you start cleaning.',
+      'Apply for Task?',
+      'The customer will review your profile and approve before you start.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Apply', onPress: async () => {
           setClaiming(jobId);
           try {
             await applyForJob(jobId);
-            setJobs((prev) => prev.filter((j) => j.id !== jobId));
+            setAppliedJobIds(prev => [...prev, jobId]);
             toast.show('Application sent! Wait for customer approval.');
           } catch (err: any) { Alert.alert('Failed', err.message ?? 'Try again.'); }
           finally { setClaiming(null); }
@@ -82,11 +109,17 @@ export default function EmployeeFeedScreen() {
         <View style={st.headerTop}>
           <View>
             <Text style={st.greeting}>Hello, {firstName} 👋</Text>
-            <Text style={st.headerTitle}>Jobs Near You</Text>
+            <Text style={st.headerTitle}>Available Tasks</Text>
           </View>
+
           <View style={st.headerActions}>
             <TouchableOpacity style={st.iconBtn} onPress={() => router.push('/employee/notifications')}>
               <Ionicons name="notifications-outline" size={20} color="#fff" />
+              {unreadCount > 0 && (
+                <View style={st.notifBadge}>
+                  <Text style={st.notifText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                </View>
+              )}
             </TouchableOpacity>
             <TouchableOpacity style={st.avatarPill} onPress={() => router.push('/employee/profile')}>
               <Text style={st.avatarText}>{firstName[0]}</Text>
@@ -96,7 +129,7 @@ export default function EmployeeFeedScreen() {
 
         <View style={st.statsRow}>
           <View style={st.statCard}>
-            <Text style={st.statLabel}>Open Jobs</Text>
+            <Text style={st.statLabel}>Available</Text>
             <Text style={st.statValue}>{stats.open}</Text>
           </View>
           <View style={st.statCard}>
@@ -111,6 +144,21 @@ export default function EmployeeFeedScreen() {
       </LinearGradient>
 
       <View style={st.contentPadding}>
+        {locStatus && locStatus !== 'granted' && (
+          <TouchableOpacity 
+            style={[st.permissionBanner, { backgroundColor: '#fee2e2', borderColor: '#fca5a5' }]}
+            onPress={() => Linking.openSettings()}
+            activeOpacity={0.8}
+          >
+             <Ionicons name="location-outline" size={20} color="#ef4444" />
+             <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#991b1b' }}>Location Access Required</Text>
+                <Text style={{ fontSize: 11, color: '#b91c1c' }}>Tap to enable GPS in device settings to see accurate distances and nearby jobs.</Text>
+             </View>
+             <Ionicons name="chevron-forward" size={16} color="#ef4444" />
+          </TouchableOpacity>
+        )}
+
         <View style={st.mapHeader}>
           <Text style={[st.sectionTitle, { color: C.text1 }]}>Jobs Near You</Text>
           <View style={st.locationPill}>
@@ -171,6 +219,13 @@ export default function EmployeeFeedScreen() {
 
     const jobTitle = item.size ? `${item.size} Clean` : 'Home Cleaning';
 
+    // Calculate real distance if we have both coordinates
+    let displayDistance = item.distance?.toFixed(1) ?? '0.4';
+    if (userLoc && item.location_lat && item.location_lng) {
+      const dist = calculateDistance(userLoc.lat, userLoc.lng, item.location_lat, item.location_lng);
+      displayDistance = dist.toFixed(1);
+    }
+
     return (
       <TouchableOpacity 
         style={[st.jobCard, { backgroundColor: C.surface, borderColor: isUrgent ? '#fca5a5' : C.divider }]}
@@ -207,7 +262,7 @@ export default function EmployeeFeedScreen() {
           </View>
           <View style={[st.badgePill, { backgroundColor: '#f0fdf4' }]}>
             <Ionicons name="navigate-outline" size={10} color="#16a34a" />
-            <Text style={[st.badgeText, { color: '#16a34a' }]}>{item.distance?.toFixed(1) ?? '0.4'} mi</Text>
+            <Text style={[st.badgeText, { color: '#16a34a' }]}>{displayDistance} km</Text>
           </View>
           
           <View style={[st.viewBtn, { backgroundColor: '#111827' }]}>
@@ -267,6 +322,15 @@ const st = StyleSheet.create({
   locationPill: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   locationText: { fontSize: 11 },
   
+  permissionBanner: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    padding: 12, 
+    borderRadius: 16, 
+    borderWidth: 1.5, 
+    marginBottom: 16 
+  },
+
   mapPlaceholder: { height: 160, borderRadius: 18, overflow: 'hidden', marginBottom: 16 },
   mapInner: { flex: 1, padding: 10, justifyContent: 'space-between' },
   mapIndicators: { gap: 2 },

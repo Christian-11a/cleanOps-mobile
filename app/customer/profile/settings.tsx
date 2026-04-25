@@ -40,7 +40,7 @@ export default function AppSettingsScreen() {
                 style={[st.row, idx > 0 && { borderTopWidth: 1, borderTopColor: C.divider }]}
                 onPress={() => setColorMode(opt.value)}
               >
-                <View style={[st.iconWrap, { backgroundColor: isSelected ? C.blue50 : '#f1f5f9' }]}>
+                <View style={[st.iconWrap, { backgroundColor: isSelected ? C.blue50 : C.surface2 }]}>
                   <Ionicons name={opt.icon} size={20} color={isSelected ? C.blue600 : C.text3} />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -56,7 +56,7 @@ export default function AppSettingsScreen() {
         <Text style={[st.sectionTitle, { color: C.text1, marginTop: 32 }]}>General</Text>
         <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
            <View style={st.row}>
-              <View style={[st.iconWrap, { backgroundColor: '#f1f5f9' }]}>
+              <View style={[st.iconWrap, { backgroundColor: C.surface2 }]}>
                 <Ionicons name="language-outline" size={20} color={C.text3} />
               </View>
               <View style={{ flex: 1 }}>

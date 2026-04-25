@@ -13,10 +13,11 @@ import { JobCard } from '@/components/shared/JobCard';
 import { formatTimeAgo } from '@/lib/utils';
 import type { Job, JobStatus } from '@/types';
 
-type FilterVal = 'all' | JobStatus;
+type FilterVal = 'all' | JobStatus | 'APPLIED';
 
 const FILTERS: { value: FilterVal; label: string }[] = [
   { value: 'all',            label: 'All' },
+  { value: 'APPLIED',        label: 'Applied' },
   { value: 'IN_PROGRESS',    label: 'In Progress' },
   { value: 'PENDING_REVIEW', label: 'Review' },
   { value: 'COMPLETED',      label: 'Done' },
@@ -38,7 +39,9 @@ export default function EmployeeJobsTab() {
     try {
       const all = await getEmployeeJobs();
       setJobs(all);
-    } catch (e) { console.warn(e); }
+    } catch (e) {
+      if (__DEV__) console.warn(e);
+    }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -46,6 +49,7 @@ export default function EmployeeJobsTab() {
 
   const counts = useMemo(() => ({
     all:            jobs.length,
+    APPLIED:        jobs.filter(j => (j as any).application_status === 'PENDING').length,
     IN_PROGRESS:    jobs.filter(j => j.status === 'IN_PROGRESS').length,
     PENDING_REVIEW: jobs.filter(j => j.status === 'PENDING_REVIEW').length,
     COMPLETED:      jobs.filter(j => j.status === 'COMPLETED').length,
@@ -54,7 +58,11 @@ export default function EmployeeJobsTab() {
 
   const filteredJobs = useMemo(() => {
     return jobs
-      .filter(j => filter === 'all' || j.status === filter)
+      .filter(j => {
+        if (filter === 'all') return true;
+        if (filter === 'APPLIED') return (j as any).application_status === 'PENDING';
+        return j.status === filter;
+      })
       .filter(j => {
         const q = search.toLowerCase();
         return j.location_address.toLowerCase().includes(q) || (j.size && j.size.toLowerCase().includes(q));
@@ -68,8 +76,8 @@ export default function EmployeeJobsTab() {
     >
       <View style={st.headerContent}>
         <View>
-          <Text style={st.headerTitle}>My Jobs</Text>
-          <Text style={st.headerSub}>{counts.IN_PROGRESS} active cleanings</Text>
+          <Text style={st.headerTitle}>My Tasks</Text>
+          <Text style={st.headerSub}>{counts.IN_PROGRESS} active sessions</Text>
         </View>
         <TouchableOpacity style={st.iconBtn} onPress={() => fetchJobs()}>
           <Ionicons name="refresh" size={20} color="#fff" />
@@ -85,7 +93,7 @@ export default function EmployeeJobsTab() {
           const active = filter === item.value;
           return (
             <TouchableOpacity 
-              style={[st.filterTab, active ? { backgroundColor: '#22c55e' } : { backgroundColor: 'rgba(255,255,255,0.1)' }]}
+              style={[st.filterTab, active ? { backgroundColor: C.blue600 } : { backgroundColor: 'rgba(255,255,255,0.1)' }]}
               onPress={() => setFilter(item.value)}
             >
               <Text style={[st.filterText, { color: active ? '#fff' : '#94a3b8' }]}>{item.label}</Text>
@@ -126,34 +134,40 @@ export default function EmployeeJobsTab() {
           keyExtractor={j => j.id}
           contentContainerStyle={[st.listContent, { paddingBottom: insets.bottom + 80 }]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchJobs(); }} tintColor={C.blue600} />}
-          renderItem={({ item }) => (
-            <TouchableOpacity 
-              style={[st.jobCard, { backgroundColor: C.surface, borderColor: C.divider }]}
-              onPress={() => router.push(`/employee/jobs/${item.id}`)}
-            >
-              <View style={st.cardTop}>
-                <View style={{ flex: 1 }}>
-                   <Text style={[st.cardTitle, { color: C.text1 }]}>{item.size || 'Home'} Cleaning</Text>
-                   <View style={st.addressRow}>
-                      <Ionicons name="location-outline" size={12} color={C.text3} />
-                      <Text style={[st.addressText, { color: C.text3 }]} numberOfLines={1}>{item.location_address}</Text>
-                   </View>
+          renderItem={({ item }) => {
+            const isApplied = (item as any).application_status === 'PENDING';
+            const displayStatus = isApplied ? 'APPLIED' : item.status.replace('_', ' ');
+            const dotColor = isApplied ? C.blue600 : (item.status === 'COMPLETED' ? C.success : (item.status === 'IN_PROGRESS' ? C.blue600 : C.warning));
+
+            return (
+              <TouchableOpacity 
+                style={[st.jobCard, { backgroundColor: C.surface, borderColor: C.divider }]}
+                onPress={() => router.push(`/employee/jobs/${item.id}`)}
+              >
+                <View style={st.cardTop}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[st.cardTitle, { color: C.text1 }]}>{item.size || 'Home'} Cleaning</Text>
+                    <View style={st.addressRow}>
+                        <Ionicons name="location-outline" size={12} color={C.text3} />
+                        <Text style={[st.addressText, { color: C.text3 }]} numberOfLines={1}>{item.location_address}</Text>
+                    </View>
+                  </View>
+                  <View style={st.priceCol}>
+                    <Text style={[st.priceText, { color: C.text1 }]}>${Number(item.price_amount).toFixed(0)}</Text>
+                    <Text style={[st.timeText, { color: C.text3 }]}>{formatTimeAgo(item.created_at)}</Text>
+                  </View>
                 </View>
-                <View style={st.priceCol}>
-                   <Text style={[st.priceText, { color: C.text1 }]}>${Number(item.price_amount).toFixed(0)}</Text>
-                   <Text style={[st.timeText, { color: C.text3 }]}>{formatTimeAgo(item.created_at)}</Text>
+                
+                <View style={st.cardFooter}>
+                  <View style={[st.statusPill, { backgroundColor: C.surface2 }]}>
+                      <View style={[st.statusDot, { backgroundColor: dotColor }]} />
+                      <Text style={[st.statusText, { color: C.text2 }]}>{displayStatus}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={C.text3} style={{ marginLeft: 'auto' }} />
                 </View>
-              </View>
-              
-              <View style={st.cardFooter}>
-                 <View style={[st.statusPill, { backgroundColor: C.surface2 }]}>
-                    <View style={[st.statusDot, { backgroundColor: item.status === 'COMPLETED' ? C.success : (item.status === 'IN_PROGRESS' ? C.blue600 : C.warning) }]} />
-                    <Text style={[st.statusText, { color: C.text2 }]}>{item.status.replace('_', ' ')}</Text>
-                 </View>
-                 <Ionicons name="chevron-forward" size={16} color={C.text3} style={{ marginLeft: 'auto' }} />
-              </View>
-            </TouchableOpacity>
-          )}
+              </TouchableOpacity>
+            );
+          }}
           ListEmptyComponent={
             <View style={st.empty}>
               <Ionicons name="file-tray-outline" size={48} color={C.text3} />

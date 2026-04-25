@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/authContext';
 import { getCustomerJobs } from '@/actions/jobs';
 import { getProfile } from '@/actions/auth';
 import { useTheme } from '@/lib/themeContext';
+import { useNotifications } from '@/lib/notificationContext';
 import { JobCard } from '@/components/shared/JobCard';
 import { RecentActivityFeed } from '@/components/dashboard/RecentActivityFeed';
 import type { Profile, Job } from '@/types';
@@ -20,6 +21,7 @@ export default function CustomerHomeTab() {
   const insets = useSafeAreaInsets();
   const { profile: authProfile, refreshProfile } = useAuth();
   const { colors: C, isDark } = useTheme();
+  const { unreadCount } = useNotifications();
   
   const [profile, setProfile] = useState<Profile | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -27,8 +29,8 @@ export default function CustomerHomeTab() {
   const [loading, setLoading] = useState(true);
 
   const QUICK_ACTIONS = [
-    { label: 'Book a Clean', icon: '🧹', route: '/customer/order', bgColor: isDark ? '#0c4a6e30' : '#e0f2fe', borderColor: isDark ? '#0c4a6e' : '#bae6fd', iconColor: C.blue600 },
-    { label: 'My Jobs', icon: '📋', route: '/customer/jobs', bgColor: isDark ? '#3b2a0a30' : '#fef9c3', borderColor: isDark ? '#3b2a0a' : '#fef08a', iconColor: C.warning },
+    { label: 'Book a Clean', icon: '🧹', route: '/customer/order', bgColor: isDark ? '#0c4a6e30' : '#e0f2fe', borderColor: isDark ? '#0c4a6e' : '#bae6fd', iconColor: isDark ? '#38bdf8' : '#0369a1' },
+    { label: 'My Bookings', icon: '📋', route: '/customer/jobs', bgColor: isDark ? '#3b2a0a30' : '#fef9c3', borderColor: isDark ? '#3b2a0a' : '#fef08a', iconColor: isDark ? '#fbbf24' : '#854d0e' },
   ];
 
   // Handle Android back button
@@ -56,7 +58,7 @@ export default function CustomerHomeTab() {
       setProfile(prof ?? authProfile);
       setJobs(jobList || []);
     } catch (error) {
-      console.error('Fetch error:', error);
+      if (__DEV__) console.error('Fetch error:', error);
       setProfile(authProfile);
     } finally {
       setLoading(false);
@@ -111,6 +113,11 @@ export default function CustomerHomeTab() {
             <View style={st.headerBtns}>
               <TouchableOpacity style={st.iconBtn} onPress={() => router.push('/customer/notifications')}>
                 <Ionicons name="notifications-outline" size={20} color="#fff" />
+                {unreadCount > 0 && (
+                  <View style={st.notifBadge}>
+                    <Text style={st.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
               <TouchableOpacity style={st.avatarBtn} onPress={() => router.push('/customer/profile')}>
                 <Text style={st.avatarText}>{userInitials}</Text>
@@ -135,7 +142,7 @@ export default function CustomerHomeTab() {
           </View>
         </LinearGradient>
 
-        <View style={[st.body, { backgroundColor: 'transparent' }]}>
+        <View style={[st.body, { paddingHorizontal: 20, paddingTop: 24 }]}>
           <Text style={[st.sectionTitle, { color: C.text1 }]}>Quick Actions</Text>
           <View style={st.actionGrid}>
             {QUICK_ACTIONS.map((action) => (
@@ -152,7 +159,7 @@ export default function CustomerHomeTab() {
           </View>
 
           <View style={st.sectionHeader}>
-            <Text style={[st.sectionTitle, { color: C.text1 }]}>3 Recent Booked Orders</Text>
+            <Text style={[st.sectionTitle, { color: C.text1 }]}>Recent Bookings</Text>
             <TouchableOpacity onPress={() => router.push('/customer/jobs')}>
               <Text style={[st.seeAll, { color: C.blue600 }]}>See all <Ionicons name="chevron-forward" size={12} color={C.blue600} /></Text>
             </TouchableOpacity>
@@ -169,8 +176,8 @@ export default function CustomerHomeTab() {
                 onPress={() => router.push('/customer/order')}
               >
                 <Ionicons name="sparkles" size={28} color="#0284c7" />
-                <Text style={[st.emptyText, { color: C.text1 }]}>No recent orders</Text>
-                <Text style={[st.emptyLink, { color: C.text3 }]}>Book your first cleaner today</Text>
+                <Text style={[st.emptyText, { color: C.text1 }]}>No recent bookings</Text>
+                <Text style={[st.emptyLink, { color: C.text3 }]}>Hire your first Cleaner today</Text>
               </TouchableOpacity>
             )}
           </View>

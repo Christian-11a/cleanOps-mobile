@@ -4,17 +4,19 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/lib/themeContext';
+import { useNotifications } from '@/lib/notificationContext';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 
 export default function EmployeeBottomNav({ state, navigation }: BottomTabBarProps) {
   const router = useRouter();
   const { colors: C, isDark } = useTheme();
+  const { unreadCount } = useNotifications();
   const insets = useSafeAreaInsets();
 
   // Mapping based on Figma: Feed, Jobs, History, Wallet, Profile
   const NAV_ITEMS: { label: string; icon: string; name: string; badge?: number }[] = [
-    { label: 'Feed',    icon: 'flash-outline',    name: 'index' },
-    { label: 'Jobs',    icon: 'briefcase-outline', name: 'active' },
+    { label: 'Explore', icon: 'flash-outline',    name: 'index' },
+    { label: 'Tasks',   icon: 'briefcase-outline', name: 'active' },
     { label: 'History', icon: 'time-outline',      name: 'history' },
     { label: 'Wallet',  icon: 'wallet-outline',    name: 'wallet' },
     { label: 'Profile', icon: 'person-outline',    name: 'profile' },
@@ -47,9 +49,9 @@ export default function EmployeeBottomNav({ state, navigation }: BottomTabBarPro
                   size={22} 
                   color={isActive ? activeColor : inactiveColor} 
                 />
-                {item.badge && (
+                {!!item.badge && (
                   <View style={st.badge}>
-                    <Text style={st.badgeText}>{item.badge}</Text>
+                    <Text style={st.badgeText}>{item.badge > 9 ? '9+' : item.badge}</Text>
                   </View>
                 )}
               </View>

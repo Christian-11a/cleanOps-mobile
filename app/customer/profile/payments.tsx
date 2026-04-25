@@ -44,7 +44,7 @@ export default function PaymentMethodsScreen() {
       const methods = await getPaymentMethods();
       setPaymentMethods(methods);
     } catch (e) {
-      console.warn(e);
+      if (__DEV__) console.warn(e);
     } finally {
       setLoading(false);
     }
@@ -137,7 +137,7 @@ export default function PaymentMethodsScreen() {
 
   return (
     <View style={[st.container, { backgroundColor: C.bg }]}>
-      <View style={[st.topBar, { backgroundColor: C.surface, borderBottomColor: C.divider, paddingTop: insets.top }]}>
+      <View style={[st.topBar, { backgroundColor: C.surface, borderBottomColor: C.divider, borderBottomWidth: 1, paddingTop: insets.top }]}>
         <TouchableOpacity style={st.backBtn} onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={24} color={C.text1} />
         </TouchableOpacity>
@@ -218,18 +218,21 @@ export default function PaymentMethodsScreen() {
                   {paymentFlow === 'otp' ? `Link ${cardBrand}` : 'Add Payment Method'}
                 </Text>
                 <TouchableOpacity onPress={() => setShowAddPayment(false)} disabled={isProcessing}>
-                   <Ionicons name="close" size={24} color={C.text2} />
+                  <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: C.surface2, alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="close" size={18} color={C.text2} />
+                  </View>
                 </TouchableOpacity>
               </View>
 
               <View style={st.modalBody}>
                 {paymentFlow === 'details' ? (
                   <>
+                    <Text style={[st.fieldLabelSmall, { color: C.text3 }]}>Select Brand</Text>
                     <View style={st.brandSelector}>
                       {(['Visa', 'Mastercard', 'Maya', 'GCash'] as PaymentBrand[]).map(b => (
-                        <TouchableOpacity 
+                        <TouchableOpacity
                           key={b}
-                          style={[st.brandOption, cardBrand === b && { borderColor: C.blue600, backgroundColor: '#f0f9ff' }]}
+                          style={[st.brandOption, cardBrand === b && { borderColor: C.blue600, backgroundColor: C.surface2 }]}
                           onPress={() => { setCardBrand(b); setErrors({}); }}
                         >
                           <Text style={[st.brandOptionText, { color: cardBrand === b ? C.blue600 : C.text2 }]}>{b}</Text>
@@ -240,8 +243,22 @@ export default function PaymentMethodsScreen() {
                     {cardBrand === 'Visa' || cardBrand === 'Mastercard' ? (
                       <>
                         <View style={st.inputSection}>
+                          <Text style={[st.fieldLabelSmall, { color: C.text3 }]}>Cardholder Name</Text>
+                          <View style={[st.inputRow, { backgroundColor: C.surface2 }, errors.cardholderName && { borderColor: C.error }]}>
+                            <TextInput
+                              style={[st.input, { color: C.text1 }]}
+                              placeholder="John Doe"
+                              value={cardholderName}
+                              onChangeText={val => { setCardholderName(val); setErrors(prev => ({ ...prev, cardholderName: '' })); }}
+                              autoCapitalize="words"
+                            />
+                          </View>
+                          {errors.cardholderName && <Text style={st.errorText}>{errors.cardholderName}</Text>}
+                        </View>
+                        <View style={st.inputSection}>
                           <Text style={[st.fieldLabelSmall, { color: C.text3 }]}>Card Number</Text>
-                          <View style={[st.inputRow, { backgroundColor: '#f1f5f9' }, errors.cardNumber && { borderColor: C.error }]}>
+                          <View style={[st.inputRow, { backgroundColor: C.surface2 }, errors.cardNumber && { borderColor: C.error }]}>
+                            <Ionicons name="card-outline" size={18} color={errors.cardNumber ? C.error : C.text3} style={{ marginRight: 8 }} />
                             <TextInput
                               style={[st.input, { color: C.text1 }]}
                               placeholder="4242 4242 4242 4242"
@@ -255,20 +272,21 @@ export default function PaymentMethodsScreen() {
                         </View>
                         <View style={{ flexDirection: 'row', gap: 12 }}>
                            <View style={{ flex: 1 }}>
-                              <Text style={[st.fieldLabelSmall, { color: C.text3 }]}>Expiry</Text>
-                              <View style={[st.inputRow, { backgroundColor: '#f1f5f9' }, errors.expiry && { borderColor: C.error }]}>
+                              <Text style={[st.fieldLabelSmall, { color: C.text3 }]}>Expiry (MM/YY)</Text>
+                              <View style={[st.inputRow, { backgroundColor: C.surface2 }, errors.expiry && { borderColor: C.error }]}>
                                 <TextInput
                                   style={[st.input, { color: C.text1 }]}
-                                  placeholder="MM/YY"
+                                  placeholder="12/28"
                                   value={formatExpiry(expiry)}
                                   onChangeText={val => { setExpiry(val); setErrors(prev => ({ ...prev, expiry: '' })); }}
                                   maxLength={5}
                                 />
                               </View>
+                              {errors.expiry && <Text style={st.errorText}>{errors.expiry}</Text>}
                            </View>
                            <View style={{ flex: 1 }}>
                               <Text style={[st.fieldLabelSmall, { color: C.text3 }]}>CVC</Text>
-                              <View style={[st.inputRow, { backgroundColor: '#f1f5f9' }, errors.cvc && { borderColor: C.error }]}>
+                              <View style={[st.inputRow, { backgroundColor: C.surface2 }, errors.cvc && { borderColor: C.error }]}>
                                 <TextInput
                                   style={[st.input, { color: C.text1 }]}
                                   placeholder="123"
@@ -279,13 +297,14 @@ export default function PaymentMethodsScreen() {
                                   secureTextEntry
                                 />
                               </View>
+                              {errors.cvc && <Text style={st.errorText}>{errors.cvc}</Text>}
                            </View>
                         </View>
                       </>
                     ) : (
                       <View style={st.inputSection}>
                         <Text style={[st.fieldLabelSmall, { color: C.text3 }]}>{cardBrand} Number</Text>
-                        <View style={[st.inputRow, { backgroundColor: '#f1f5f9' }, errors.phoneNumber && { borderColor: C.error }]}>
+                        <View style={[st.inputRow, { backgroundColor: C.surface2 }, errors.phoneNumber && { borderColor: C.error }]}>
                           <Text style={{ fontWeight: '700', color: C.text1, marginRight: 8 }}>+63</Text>
                           <TextInput
                             style={[st.input, { color: C.text1 }]}
@@ -301,14 +320,14 @@ export default function PaymentMethodsScreen() {
 
                     <TouchableOpacity style={st.confirmBtn} onPress={handleAddPaymentMethod} disabled={isProcessing}>
                       <LinearGradient colors={['#0ea5e9', '#0284c7']} style={st.btnGradient}>
-                        {isProcessing ? <ActivityIndicator color="#fff" /> : <Text style={st.confirmBtnText}>Continue</Text>}
+                        {isProcessing ? <ActivityIndicator color="#fff" /> : <Text style={st.confirmBtnText}>{cardBrand === 'Visa' || cardBrand === 'Mastercard' ? 'Link Card' : 'Continue'}</Text>}
                       </LinearGradient>
                     </TouchableOpacity>
                   </>
                 ) : (
                   <View style={{ gap: 20 }}>
                     <Text style={{ textAlign: 'center', color: C.text3 }}>Enter 6-digit code sent to +63 {phoneNumber}</Text>
-                    <View style={[st.inputRow, { backgroundColor: '#f1f5f9', justifyContent: 'center' }, errors.otp && { borderColor: C.error }]}>
+                    <View style={[st.inputRow, { backgroundColor: C.surface2, justifyContent: 'center' }, errors.otp && { borderColor: C.error }]}>
                       <TextInput
                         style={[st.input, { color: C.text1, textAlign: 'center', fontSize: 24, letterSpacing: 8 }]}
                         placeholder="000000"

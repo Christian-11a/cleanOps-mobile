@@ -22,7 +22,7 @@ export default function AdminDashboardScreen() {
 
   const fetchJobs = useCallback(async () => {
     try { setJobs(await getAllJobs()); }
-    catch (e) { console.warn(e); }
+    catch (e) { if (__DEV__) console.warn(e); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 

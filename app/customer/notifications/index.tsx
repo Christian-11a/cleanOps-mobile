@@ -8,12 +8,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/lib/themeContext';
-import { getNotifications, markAllNotificationsRead, formatNotification, type DBNotification } from '@/actions/notifications';
+import { useNotifications } from '@/lib/notificationContext';
+import { getNotifications, formatNotification, type DBNotification } from '@/actions/notifications';
 import { formatTimeAgo } from '@/lib/utils';
 
 export default function CustomerNotificationsScreen() {
   const router = useRouter();
   const { colors: C, isDark } = useTheme();
+  const { markAllRead } = useNotifications();
   const insets = useSafeAreaInsets();
 
   const [loading, setLoading] = useState(true);
@@ -25,7 +27,7 @@ export default function CustomerNotificationsScreen() {
       const data = await getNotifications();
       setNotifications(data);
     } catch (e) {
-      console.warn(e);
+      if (__DEV__) console.warn(e);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -37,7 +39,7 @@ export default function CustomerNotificationsScreen() {
   const onRefresh = () => { setRefreshing(true); fetchData(); };
 
   const handleMarkAllRead = async () => {
-    await markAllNotificationsRead();
+    await markAllRead();
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
   };
 
