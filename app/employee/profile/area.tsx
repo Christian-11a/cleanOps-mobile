@@ -5,6 +5,8 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
+import * as Linking from 'expo-linking';
 import { useColors } from '@/lib/themeContext';
 import { PanGestureHandler, PanGestureHandlerGestureEvent, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useAuth } from '@/lib/authContext';
@@ -22,14 +24,20 @@ export default function ServiceAreaScreen() {
   const [sliderWidth, setSliderWidth] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [locStatus, setLocStatus] = useState<Location.PermissionStatus | null>(null);
   const minRadius = 1;
   const maxRadius = 50;
 
   useEffect(() => {
-    if (profile) {
-      setRadius(profile.service_radius || 15);
+    async function init() {
+      if (profile) {
+        setRadius(profile.service_radius || 15);
+      }
+      const { status } = await Location.getForegroundPermissionsAsync();
+      setLocStatus(status);
       setLoading(false);
     }
+    init();
   }, [profile]);
 
   const onLayout = (event: LayoutChangeEvent) => {
@@ -146,6 +154,40 @@ export default function ServiceAreaScreen() {
              </View>
           </View>
 
+          <Text style={[st.sectionTitle, { color: C.text1, marginTop: 32 }]}>Device Permissions</Text>
+          <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
+             <View style={[st.row, { paddingVertical: 20 }]}>
+                <View style={[st.iconWrap, { backgroundColor: locStatus === 'granted' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)' }]}>
+                   <Ionicons 
+                      name={locStatus === 'granted' ? "shield-checkmark" : "alert-circle"} 
+                      size={24} 
+                      color={locStatus === 'granted' ? "#22c55e" : "#ef4444"} 
+                   />
+                </View>
+                <View style={{ flex: 1 }}>
+                   <Text style={[st.label, { color: C.text1 }]}>Location Access</Text>
+                   <Text style={[st.sub, { color: C.text3 }]}>
+                      Status: <Text style={{ fontWeight: '700', color: locStatus === 'granted' ? '#22c55e' : '#ef4444' }}>
+                        {locStatus === 'granted' ? 'Enabled' : (locStatus === 'denied' ? 'Denied' : 'Not Set')}
+                      </Text>
+                   </Text>
+                </View>
+                <TouchableOpacity 
+                   style={[st.settingsBtn, { backgroundColor: C.surface2 }]}
+                   onPress={() => Linking.openSettings()}
+                >
+                   <Text style={[st.settingsBtnText, { color: C.text2 }]}>Settings</Text>
+                </TouchableOpacity>
+             </View>
+             {locStatus !== 'granted' && (
+               <View style={{ backgroundColor: 'rgba(239, 68, 68, 0.05)', padding: 12, borderTopWidth: 1, borderTopColor: C.divider }}>
+                  <Text style={{ fontSize: 11, color: '#ef4444', lineHeight: 16 }}>
+                    GPS is required to calculate distances to jobs. If you denied access, please tap the button above to enable it in your phone settings.
+                  </Text>
+               </View>
+             )}
+          </View>
+
           <TouchableOpacity style={[st.saveBtn, { backgroundColor: '#22c55e' }]} onPress={handleSave} disabled={saving}>
              {saving ? <ActivityIndicator color="#fff" /> : <Text style={st.saveBtnText}>Save Preferences</Text>}
           </TouchableOpacity>
@@ -170,6 +212,9 @@ const st = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
   label: { fontSize: 15, fontWeight: '600' },
   sub: { fontSize: 12, marginTop: 2 },
+  iconWrap: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  settingsBtn: { paddingHorizontal: 16, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  settingsBtnText: { fontSize: 13, fontWeight: '700' },
   saveBtn: { height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginTop: 40 },
   saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
 });

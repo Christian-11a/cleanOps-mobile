@@ -37,7 +37,7 @@ export default function CustomerProfileTab() {
       setReviewsCount(0);
       setSatisfaction('New');
     } catch (e) {
-      console.warn(e);
+      if (__DEV__) console.warn(e);
     } finally {
       setLoading(false);
       setRefreshing(false);

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,8 +25,6 @@ export default function NotificationsScreen() {
     setSettings(updated);
   }
 
-  if (!settings) return null;
-
   const options: { key: keyof UserSettings; label: string; sub: string; icon: keyof typeof Ionicons.glyphMap }[] = [
     { key: 'pushNotifications', label: 'Push Notifications', sub: 'Instant alerts on your device', icon: 'notifications-outline' },
     { key: 'emailUpdates', label: 'Email Updates', sub: 'Summary and transaction receipts', icon: 'mail-outline' },
@@ -44,30 +42,36 @@ export default function NotificationsScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={st.scroll}>
-        <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
-          {options.map((opt, idx) => (
-            <View key={opt.key} style={[st.row, idx > 0 && { borderTopWidth: 1, borderTopColor: C.divider }]}>
-              <View style={[st.iconWrap, { backgroundColor: '#f1f5f9' }]}>
-                <Ionicons name={opt.icon} size={20} color={C.blue600} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[st.label, { color: C.text1 }]}>{opt.label}</Text>
-                <Text style={[st.sub, { color: C.text3 }]}>{opt.sub}</Text>
-              </View>
-              <Switch 
-                value={settings[opt.key]} 
-                onValueChange={() => toggleSetting(opt.key)}
-                trackColor={{ false: '#cbd5e1', true: C.blue600 }}
-                thumbColor="#fff"
-              />
-            </View>
-          ))}
+      {!settings ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={C.blue600} />
         </View>
-        <Text style={[st.footerNote, { color: C.text3 }]}>
-          You can change these preferences at any time. Critical security alerts cannot be disabled.
-        </Text>
-      </ScrollView>
+      ) : (
+        <ScrollView contentContainerStyle={st.scroll}>
+          <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
+            {options.map((opt, idx) => (
+              <View key={opt.key} style={[st.row, idx > 0 && { borderTopWidth: 1, borderTopColor: C.divider }]}>
+                <View style={[st.iconWrap, { backgroundColor: C.surface2 }]}>
+                  <Ionicons name={opt.icon} size={20} color={C.blue600} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[st.label, { color: C.text1 }]}>{opt.label}</Text>
+                  <Text style={[st.sub, { color: C.text3 }]}>{opt.sub}</Text>
+                </View>
+                <Switch 
+                  value={settings[opt.key]} 
+                  onValueChange={() => toggleSetting(opt.key)}
+                  trackColor={{ false: '#cbd5e1', true: C.blue600 }}
+                  thumbColor="#fff"
+                />
+              </View>
+            ))}
+          </View>
+          <Text style={[st.footerNote, { color: C.text3 }]}>
+            You can change these preferences at any time. Critical security alerts cannot be disabled.
+          </Text>
+        </ScrollView>
+      )}
     </View>
   );
 }

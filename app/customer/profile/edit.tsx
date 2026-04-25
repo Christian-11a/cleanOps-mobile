@@ -7,14 +7,16 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/lib/authContext';
-import { useColors } from '@/lib/themeContext';
+import { useTheme, useColors } from '@/lib/themeContext';
 import { useToast } from '@/lib/toastContext';
 import { updateProfile } from '@/actions/profile';
+
+import * as Location from 'expo-location';
 
 export default function EditProfileScreen() {
   const router = useRouter();
   const { profile, refreshProfile } = useAuth();
-  const C = useColors();
+  const { colors: C, isDark } = useTheme();
   const toast = useToast();
   const insets = useSafeAreaInsets();
 
@@ -23,6 +25,7 @@ export default function EditProfileScreen() {
   const [phone,     setPhone]     = useState(profile?.phone ?? '');
   const [address,   setAddress]   = useState(profile?.location_address ?? ''); 
   const [saving,    setSaving]    = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
 
   useEffect(() => {
     if (profile?.full_name) {
@@ -33,6 +36,31 @@ export default function EditProfileScreen() {
       setAddress(profile.location_address || '');
     }
   }, [profile]);
+
+  async function handleFetchLocation() {
+    setIsLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Please enter address manually.');
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({});
+      const rev = await Location.reverseGeocodeAsync({
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+      });
+      if (rev.length > 0) {
+        const a = rev[0];
+        const formatted = `${a.name || ''} ${a.street || ''}, ${a.district || a.city || ''}`.trim();
+        setAddress(formatted);
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Could not fetch location.');
+    } finally {
+      setIsLocating(false);
+    }
+  }
 
   async function handleSave() {
     if (!firstName.trim()) { Alert.alert('Required', 'First name is required.'); return; }
@@ -56,7 +84,7 @@ export default function EditProfileScreen() {
 
   return (
     <View style={[st.container, { backgroundColor: C.bg }]}>
-      <View style={[st.topBar, { backgroundColor: C.surface, borderBottomColor: C.divider, paddingTop: insets.top }]}>
+      <View style={[st.topBar, { backgroundColor: C.surface, borderBottomColor: C.divider, borderBottomWidth: 1, paddingTop: insets.top }]}>
         <TouchableOpacity style={st.backBtn} onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={24} color={C.text1} />
         </TouchableOpacity>
@@ -65,10 +93,10 @@ export default function EditProfileScreen() {
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={st.scroll} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={[st.scroll, { paddingBottom: insets.bottom + 60 }]} showsVerticalScrollIndicator={false}>
           {/* Avatar Section */}
           <View style={st.avatarSection}>
-            <View style={[st.avatarLarge, { backgroundColor: C.blue600 }]}>
+            <View style={[st.avatarLarge, { backgroundColor: isDark ? C.surface2 : '#1e293b' }]}>
                <Text style={st.avatarLargeText}>{firstName[0]?.toUpperCase() || 'U'}</Text>
                <TouchableOpacity style={st.cameraBtn}>
                   <Ionicons name="camera" size={16} color="#fff" />
@@ -80,15 +108,27 @@ export default function EditProfileScreen() {
           <Text style={[st.sectionHeader, { color: C.text3 }]}>PERSONAL INFORMATION</Text>
           <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
             <View style={st.fieldGroup}>
-              <Text style={[st.fieldLabelSmall, { color: C.text2 }]}>First Name</Text>
+              <Text style={[st.fieldLabelSmall, { color: C.text3 }]}>First Name</Text>
               <View style={[st.inputRow, { backgroundColor: C.surface2, borderColor: C.divider }]}>
-                <TextInput style={[st.input, { color: C.text1 }]} value={firstName} onChangeText={setFirstName} placeholder="e.g. Alex" />
+                <TextInput 
+                  style={[st.input, { color: C.text1 }]} 
+                  value={firstName} 
+                  onChangeText={setFirstName} 
+                  placeholder="e.g. Alex" 
+                  placeholderTextColor={C.text3}
+                />
               </View>
             </View>
             <View style={st.fieldGroup}>
-              <Text style={[st.fieldLabelSmall, { color: C.text2 }]}>Last Name</Text>
+              <Text style={[st.fieldLabelSmall, { color: C.text3 }]}>Last Name</Text>
               <View style={[st.inputRow, { backgroundColor: C.surface2, borderColor: C.divider }]}>
-                <TextInput style={[st.input, { color: C.text1 }]} value={lastName} onChangeText={setLastName} placeholder="e.g. Chen" />
+                <TextInput 
+                  style={[st.input, { color: C.text1 }]} 
+                  value={lastName} 
+                  onChangeText={setLastName} 
+                  placeholder="e.g. Chen" 
+                  placeholderTextColor={C.text3}
+                />
               </View>
             </View>
           </View>
@@ -96,16 +136,22 @@ export default function EditProfileScreen() {
           <Text style={[st.sectionHeader, { color: C.text3, marginTop: 24 }]}>CONTACT DETAILS</Text>
           <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
             <View style={st.fieldGroup}>
-              <Text style={[st.fieldLabelSmall, { color: C.text2 }]}>Email Address</Text>
+              <Text style={[st.fieldLabelSmall, { color: C.text3 }]}>Email Address</Text>
               <View style={[st.inputRow, { backgroundColor: C.surface2, borderColor: C.divider, opacity: 0.6 }]}>
                 <TextInput style={[st.input, { color: C.text1 }]} value={profile?.email} editable={false} />
                 <Ionicons name="lock-closed" size={14} color={C.text3} />
               </View>
             </View>
             <View style={st.fieldGroup}>
-              <Text style={[st.fieldLabelSmall, { color: C.text2 }]}>Phone Number</Text>
+              <Text style={[st.fieldLabelSmall, { color: C.text3 }]}>Phone Number</Text>
               <View style={[st.inputRow, { backgroundColor: C.surface2, borderColor: C.divider }]}>
-                <TextInput style={[st.input, { color: C.text1 }]} value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+                <TextInput 
+                  style={[st.input, { color: C.text1 }]} 
+                  value={phone} 
+                  onChangeText={setPhone} 
+                  keyboardType="phone-pad" 
+                  placeholderTextColor={C.text3}
+                />
               </View>
             </View>
           </View>
@@ -113,9 +159,28 @@ export default function EditProfileScreen() {
           <Text style={[st.sectionHeader, { color: C.text3, marginTop: 24 }]}>DEFAULT LOCATION</Text>
           <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
             <View style={st.fieldGroup}>
-              <Text style={[st.fieldLabelSmall, { color: C.text2 }]}>Service Address</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={[st.fieldLabelSmall, { color: C.text3 }]}>Service Address</Text>
+                <TouchableOpacity 
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                  onPress={handleFetchLocation}
+                  disabled={isLocating}
+                >
+                  <Ionicons name="locate" size={14} color={C.blue600} />
+                  <Text style={{ fontSize: 12, color: C.blue600, fontWeight: '700' }}>
+                    {isLocating ? 'Locating...' : 'Locate Me'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
               <View style={[st.inputRow, { backgroundColor: C.surface2, borderColor: C.divider }]}>
-                <TextInput style={[st.input, { color: C.text1 }]} value={address} onChangeText={setAddress} multiline />
+                <TextInput 
+                  style={[st.input, { color: C.text1 }]} 
+                  value={address} 
+                  onChangeText={setAddress} 
+                  multiline 
+                  placeholder="Street name, Brgy, City..."
+                  placeholderTextColor={C.text3}
+                />
                 <Ionicons name="location-outline" size={16} color={C.text3} />
               </View>
             </View>
@@ -135,7 +200,7 @@ const st = StyleSheet.create({
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, paddingBottom: 12, borderBottomWidth: 1 },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   topTitle: { fontSize: 17, fontWeight: '700' },
-  scroll: { padding: 20, paddingBottom: 60 },
+  scroll: { padding: 20 },
   avatarSection: { alignItems: 'center', marginBottom: 32 },
   avatarLarge: { width: 100, height: 100, borderRadius: 40, alignItems: 'center', justifyContent: 'center', position: 'relative' },
   avatarLargeText: { fontSize: 36, fontWeight: '800', color: '#fff' },

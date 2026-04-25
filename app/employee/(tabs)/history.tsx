@@ -27,7 +27,7 @@ export default function EmployeeHistoryScreen() {
     try {
       const all = await getEmployeeJobs();
       setJobs(all.filter((j) => j.status === 'COMPLETED' || j.status === 'CANCELLED'));
-    } catch (e) { console.warn(e); }
+    } catch (e) { if (__DEV__) console.warn(e); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -76,17 +76,17 @@ export default function EmployeeHistoryScreen() {
          {/* Grid Stats */}
          <View style={st.statsGrid}>
             <View style={[st.gridItem, { backgroundColor: C.surface, borderColor: C.divider }]}>
-               <Text style={st.gridVal}>{stats.count}</Text>
+               <Text style={[st.gridVal, { color: C.text1 }]}>{stats.count}</Text>
                <Text style={[st.gridLabel, { color: C.text3 }]}>Jobs Done</Text>
                <Text style={[st.gridSub, { color: C.text3 }]}>total</Text>
             </View>
             <View style={[st.gridItem, { backgroundColor: C.surface, borderColor: C.divider }]}>
-               <Text style={st.gridVal}>{profile?.rating ? `${profile.rating.toFixed(1)} ⭐` : 'New'}</Text>
+               <Text style={[st.gridVal, { color: C.text1 }]}>{profile?.rating ? `${profile.rating.toFixed(1)} ⭐` : 'New'}</Text>
                <Text style={[st.gridLabel, { color: C.text3 }]}>Avg Rating</Text>
                <Text style={[st.gridSub, { color: C.text3 }]}>{profile?.rating ? 'out of 5' : 'No ratings yet'}</Text>
             </View>
             <View style={[st.gridItem, { backgroundColor: C.surface, borderColor: C.divider }]}>
-               <Text style={st.gridVal}>${stats.avgPayout.toFixed(0)}</Text>
+               <Text style={[st.gridVal, { color: C.text1 }]}>${stats.avgPayout.toFixed(0)}</Text>
                <Text style={[st.gridLabel, { color: C.text3 }]}>Per Job</Text>
                <Text style={[st.gridSub, { color: C.text3 }]}>average</Text>
             </View>

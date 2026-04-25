@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/lib/authContext';
 import { ThemeProvider, useTheme } from '@/lib/themeContext';
 import { ToastProvider, useToast } from '@/lib/toastContext';
+import { NotificationProvider } from '@/lib/notificationContext';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { LoadingScreen } from '@/components/shared/LoadingScreen';
 
@@ -29,12 +30,12 @@ function RootNav() {
     if (loading) return;
 
     const firstSeg  = segments[0] as string | undefined;
-    const inPublic  = !firstSeg || firstSeg === 'homepage' || firstSeg === 'login' || firstSeg === 'signup';
+    const inPublic  = !firstSeg || firstSeg === 'login' || firstSeg === 'signup';
 
     if (!user) {
-      if (!inPublic) router.replace('/homepage');
+      if (!inPublic) router.replace('/');
     } else {
-      if (inPublic) {
+      if (inPublic || firstSeg === 'homepage') {
         if (role === 'employee')      router.replace('/employee');
         else if (role === 'admin')    router.replace('/admin/dashboard');
         else                          router.replace('/customer');
@@ -48,7 +49,6 @@ function RootNav() {
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index"             />
-        <Stack.Screen name="homepage/index"    />
         <Stack.Screen name="login/index"       />
         <Stack.Screen name="signup/index"      />
         
@@ -59,7 +59,6 @@ function RootNav() {
         
         {/* Employee Section */}
         <Stack.Screen name="employee/(tabs)"   />
-        <Stack.Screen name="employee/dashboard/index" />
         <Stack.Screen name="employee/jobs/[id]/index" />
 
         {/* Admin Section */}
@@ -76,7 +75,9 @@ export default function RootLayout() {
         <ThemeProvider>
           <AuthProvider>
             <ToastProvider>
-              <RootNav />
+              <NotificationProvider>
+                <RootNav />
+              </NotificationProvider>
             </ToastProvider>
           </AuthProvider>
         </ThemeProvider>

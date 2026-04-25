@@ -38,7 +38,10 @@ export default function CustomerJobsTab() {
 
   const fetchJobs = useCallback(async () => {
     try { setJobs(await getCustomerJobs()); }
-    catch (e) { console.warn(e); }
+    catch (e) {
+      if (__DEV__) console.warn(e);
+      toast.show('Failed to load bookings. Pull to refresh.', 'error');
+    }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -72,7 +75,7 @@ export default function CustomerJobsTab() {
       >
         <View style={st.headerContent}>
           <View style={st.headerTextWrap}>
-            <Text style={st.headerTitle}>My Jobs</Text>
+            <Text style={st.headerTitle}>My Bookings</Text>
             <Text style={st.headerSub}>{jobs.length} total bookings</Text>
           </View>
         </View>

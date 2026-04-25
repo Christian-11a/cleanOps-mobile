@@ -5,11 +5,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/lib/themeContext';
+import { useNotifications } from '@/lib/notificationContext';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 
 export default function BottomNav({ state, navigation, descriptors }: BottomTabBarProps) {
   const router = useRouter();
   const { colors: C, isDark } = useTheme();
+  const { unreadCount } = useNotifications();
   const insets = useSafeAreaInsets();
 
   const NAV_ITEMS = [
@@ -63,6 +65,11 @@ export default function BottomNav({ state, navigation, descriptors }: BottomTabB
                   size={24} 
                   color={isActive ? C.blue600 : C.text3} 
                 />
+                {!!item.badge && (
+                  <View style={st.badge}>
+                    <Text style={st.badgeText}>{item.badge > 9 ? '9+' : item.badge}</Text>
+                  </View>
+                )}
               </View>
               <Text style={[st.label, { color: isActive ? C.blue600 : C.text3, fontWeight: isActive ? '600' : '500' }]}>
                 {item.label}
@@ -104,6 +111,25 @@ const st = StyleSheet.create({
     width: 36, height: 36,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  badge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: '#ef4444',
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: '#fff',
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 8,
+    fontWeight: '900',
   },
   label: {
     fontSize: 9,

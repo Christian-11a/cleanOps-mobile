@@ -37,6 +37,8 @@ export interface Profile {
   };
   service_radius: number;
   location_address?: string;
+  location_lat?: number;
+  location_lng?: number;
   created_at: string;
 }
 
@@ -57,6 +59,8 @@ export interface Job {
   size?: string;
   tasks: string[];
   location_address: string;
+  location_lat?: number;
+  location_lng?: number;
   distance?: number;
   price_amount: number;
   proof_urls?: string[];

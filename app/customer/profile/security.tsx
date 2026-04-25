@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, Modal, TextInput,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, Modal, TextInput, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -54,11 +54,9 @@ export default function SecurityScreen() {
     }
   }
 
-  if (!settings) return null;
-
   return (
     <View style={[st.container, { backgroundColor: C.bg }]}>
-      <View style={[st.topBar, { backgroundColor: C.surface, borderBottomColor: C.divider, paddingTop: insets.top }]}>
+      <View style={[st.topBar, { backgroundColor: C.surface, borderBottomColor: C.divider, borderBottomWidth: 1, paddingTop: insets.top }]}>
         <TouchableOpacity style={st.backBtn} onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={24} color={C.text1} />
         </TouchableOpacity>
@@ -66,55 +64,61 @@ export default function SecurityScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={st.scroll}>
-        <Text style={[st.sectionTitle, { color: C.text1 }]}>Authentication</Text>
-        <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
-          <TouchableOpacity style={st.row} onPress={() => setPwdModal(true)}>
-            <View style={[st.iconWrap, { backgroundColor: '#fef2f2' }]}>
-              <Ionicons name="lock-closed-outline" size={20} color="#ef4444" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[st.label, { color: C.text1 }]}>Change Password</Text>
-              <Text style={[st.sub, { color: C.text3 }]}>Update your login credentials</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={C.text3} />
-          </TouchableOpacity>
+      {!settings ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={C.blue600} />
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={st.scroll}>
+          <Text style={[st.sectionTitle, { color: C.text1 }]}>Authentication</Text>
+          <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
+            <TouchableOpacity style={st.row} onPress={() => setPwdModal(true)}>
+              <View style={[st.iconWrap, { backgroundColor: '#fef2f2' }]}>
+                <Ionicons name="lock-closed-outline" size={20} color="#ef4444" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[st.label, { color: C.text1 }]}>Change Password</Text>
+                <Text style={[st.sub, { color: C.text3 }]}>Update your login credentials</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={C.text3} />
+            </TouchableOpacity>
 
-          <View style={[st.row, { borderTopWidth: 1, borderTopColor: C.divider }]}>
-            <View style={[st.iconWrap, { backgroundColor: '#f0f9ff' }]}>
-              <Ionicons name="finger-print-outline" size={20} color={C.blue600} />
+            <View style={[st.row, { borderTopWidth: 1, borderTopColor: C.divider }]}>
+              <View style={[st.iconWrap, { backgroundColor: C.surface2 }]}>
+                <Ionicons name="finger-print-outline" size={20} color={C.blue600} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[st.label, { color: C.text1 }]}>Enable Biometrics</Text>
+                <Text style={[st.sub, { color: C.text3 }]}>Use FaceID or Fingerprint</Text>
+              </View>
+              <Switch 
+                value={settings.biometrics} 
+                onValueChange={toggleBiometrics}
+                trackColor={{ false: '#cbd5e1', true: C.blue600 }}
+                thumbColor="#fff"
+              />
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[st.label, { color: C.text1 }]}>Enable Biometrics</Text>
-              <Text style={[st.sub, { color: C.text3 }]}>Use FaceID or Fingerprint</Text>
-            </View>
-            <Switch 
-              value={settings.biometrics} 
-              onValueChange={toggleBiometrics}
-              trackColor={{ false: '#cbd5e1', true: C.blue600 }}
-              thumbColor="#fff"
-            />
           </View>
-        </View>
 
-        <Text style={[st.sectionTitle, { color: C.text1, marginTop: 32 }]}>Data & Privacy</Text>
-        <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
-          <TouchableOpacity style={st.row} onPress={() => setPolicyModal(true)}>
-            <View style={[st.iconWrap, { backgroundColor: '#f8fafc' }]}>
-              <Ionicons name="document-text-outline" size={20} color={C.text2} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[st.label, { color: C.text1 }]}>Privacy Policy</Text>
-              <Text style={[st.sub, { color: C.text3 }]}>How we handle your data</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={C.text3} />
+          <Text style={[st.sectionTitle, { color: C.text1, marginTop: 32 }]}>Data & Privacy</Text>
+          <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
+            <TouchableOpacity style={st.row} onPress={() => setPolicyModal(true)}>
+              <View style={[st.iconWrap, { backgroundColor: '#f8fafc' }]}>
+                <Ionicons name="document-text-outline" size={20} color={C.text2} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[st.label, { color: C.text1 }]}>Privacy Policy</Text>
+                <Text style={[st.sub, { color: C.text3 }]}>How we handle your data</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={C.text3} />
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity style={st.deleteBtn}>
+             <Text style={st.deleteBtnText}>Request Account Deletion</Text>
           </TouchableOpacity>
-        </View>
-
-        <TouchableOpacity style={st.deleteBtn}>
-           <Text style={st.deleteBtnText}>Request Account Deletion</Text>
-        </TouchableOpacity>
-      </ScrollView>
+        </ScrollView>
+      )}
 
       {/* Change Password Modal */}
       <Modal visible={pwdModal} transparent animationType="slide">
@@ -123,7 +127,7 @@ export default function SecurityScreen() {
             <Text style={[st.modalTitle, { color: C.text1 }]}>Change Password</Text>
             
             <View style={st.inputGroup}>
-              <Text style={[st.inputLabel, { color: C.text2 }]}>Current Password</Text>
+              <Text style={[st.inputLabel, { color: C.text3 }]}>Current Password</Text>
               <TextInput
                 style={[st.input, { color: C.text1, borderColor: C.divider }]}
                 secureTextEntry
@@ -135,7 +139,7 @@ export default function SecurityScreen() {
             </View>
 
             <View style={st.inputGroup}>
-              <Text style={[st.inputLabel, { color: C.text2 }]}>New Password</Text>
+              <Text style={[st.inputLabel, { color: C.text3 }]}>New Password</Text>
               <TextInput
                 style={[st.input, { color: C.text1, borderColor: C.divider }]}
                 secureTextEntry
@@ -147,7 +151,7 @@ export default function SecurityScreen() {
             </View>
 
             <View style={st.inputGroup}>
-              <Text style={[st.inputLabel, { color: C.text2 }]}>Confirm New Password</Text>
+              <Text style={[st.inputLabel, { color: C.text3 }]}>Confirm New Password</Text>
               <TextInput
                 style={[st.input, { color: C.text1, borderColor: C.divider }]}
                 secureTextEntry
@@ -165,8 +169,8 @@ export default function SecurityScreen() {
               >
                 <Text style={[st.modalBtnText, { color: C.text1 }]}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={[st.modalBtn, { backgroundColor: '#22c55e' }]} 
+              <TouchableOpacity
+                style={[st.modalBtn, { backgroundColor: C.blue600 }]}
                 onPress={handlePasswordChange}
               >
                 <Text style={[st.modalBtnText, { color: '#fff' }]}>Update</Text>
@@ -207,7 +211,7 @@ export default function SecurityScreen() {
             </ScrollView>
 
             <TouchableOpacity 
-              style={[st.modalBtn, { backgroundColor: '#22c55e', marginTop: 20 }]} 
+              style={[st.modalBtn, { backgroundColor: C.blue600, marginTop: 20 }]}
               onPress={() => setPolicyModal(false)}
             >
               <Text style={[st.modalBtnText, { color: '#fff' }]}>I Understand</Text>

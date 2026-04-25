@@ -2,20 +2,21 @@ import React, { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, ActivityIndicator, Image, Dimensions, Platform,
-  StatusBar, TextInput, Modal, BackHandler, Share
+  StatusBar, TextInput, Modal, BackHandler, Share, Linking
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { getJob, applyForJob, updateJobStatus, uploadProofImage } from '@/actions/jobs';
+import { getJob, applyForJob, updateJobStatus, uploadProofImage, hasEmployeeAppliedToJob } from '@/actions/jobs';
 import { useTheme } from '@/lib/themeContext';
 import { useToast } from '@/lib/toastContext';
 import { StatusBadge } from '@/components/shared/StatusBadge';
-import { formatTimeAgo } from '@/lib/utils';
+import { formatTimeAgo, calculateDistance } from '@/lib/utils';
 import { useAuth } from '@/lib/authContext';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import type { Job } from '@/types';
 
 const { width } = Dimensions.get('window');
@@ -34,6 +35,7 @@ export default function EmployeeJobDetailScreen() {
   const [submitting,  setSubmitting]  = useState(false);
   const [showChat,    setShowChat]    = useState(false);
   const [hasApplied,  setHasApplied]  = useState(false);
+  const [userLoc,     setUserLoc]     = useState<{lat: number, lng: number} | null>(null);
   
   // Checklist State
   const [completedTasks, setCompletedTasks] = useState<Set<number>>(new Set());
@@ -41,6 +43,10 @@ export default function EmployeeJobDetailScreen() {
   // Submission State
   const [proofDesc, setProofDesc] = useState('');
   const [images,    setImages]    = useState<string[]>([]);
+
+  // Permissions
+  const [cameraStatus,  requestCameraPermission]  = ImagePicker.useCameraPermissions();
+  const [libraryStatus, requestLibraryPermission] = ImagePicker.useMediaLibraryPermissions();
 
   useEffect(() => {
     const onBackPress = () => {
@@ -53,14 +59,48 @@ export default function EmployeeJobDetailScreen() {
 
   const fetchJob = async () => {
     try {
-      const data = await getJob(id);
+      // 1. Fetch only essential data (Job info + specific applied check)
+      const [data, alreadyApplied] = await Promise.all([
+        getJob(id),
+        hasEmployeeAppliedToJob(id)
+      ]);
+
       setJob(data);
+      setHasApplied(alreadyApplied);
+
       if (data.status === 'PENDING_REVIEW' || data.status === 'COMPLETED') {
          const all = new Set(data.tasks.map((_, i) => i));
          setCompletedTasks(all);
       }
-    } catch (e) { console.warn(e); }
-    finally { setLoading(false); }
+
+      // 2. STOP LOADING SPINNER IMMEDIATELY
+      setLoading(false);
+
+      // 3. FETCH GPS IN BACKGROUND (NON-BLOCKING)
+      Location.getForegroundPermissionsAsync().then(async (perm) => {
+        if (perm.status === 'granted') {
+          try {
+            // Try last known first (instant)
+            let loc = await Location.getLastKnownPositionAsync();
+            
+            // If null or stale, fetch new one with balanced accuracy (faster than high)
+            if (!loc) {
+              loc = await Location.getCurrentPositionAsync({ 
+                accuracy: Location.Accuracy.Balanced 
+              });
+            }
+
+            if (loc) {
+              setUserLoc({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+            }
+          } catch(e) { if (__DEV__) console.warn('Background GPS failed:', e); }
+        }
+      });
+
+    } catch (e) {
+      if (__DEV__) console.warn(e);
+      setLoading(false);
+    }
   };
 
   useEffect(() => { fetchJob(); }, [id]);
@@ -81,17 +121,70 @@ export default function EmployeeJobDetailScreen() {
   };
 
   const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') return Alert.alert('Error', 'Library access required');
-    const res = await ImagePicker.launchImageLibraryAsync({ quality: 0.7, allowsMultipleSelection: true });
+    if (libraryStatus?.status !== ImagePicker.PermissionStatus.GRANTED) {
+      const permission = await requestLibraryPermission();
+      if (!permission.granted) return Alert.alert('Error', 'Library access required');
+    }
+    const res = await ImagePicker.launchImageLibraryAsync({ 
+      quality: 0.7, 
+      allowsMultipleSelection: true,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    });
     if (!res.canceled) setImages(prev => [...prev, ...res.assets.map(a => a.uri)]);
+  };
+
+  const takePhoto = async () => {
+    if (cameraStatus?.status !== ImagePicker.PermissionStatus.GRANTED) {
+      const permission = await requestCameraPermission();
+      if (!permission.granted) return Alert.alert('Error', 'Camera access required');
+    }
+    const res = await ImagePicker.launchCameraAsync({ 
+      quality: 0.7,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    });
+    if (!res.canceled) setImages(prev => [...prev, ...res.assets.map(a => a.uri)]);
+  };
+
+  const handleNavigate = async () => {
+    const { location_lat: lat, location_lng: lng, location_address: addr } = job || {};
+    const label = `${job?.size || 'Home'} Cleaning`;
+    
+
+    let url = '';
+    if (lat && lng) {
+      url = Platform.select({
+        ios: `maps:0,0?q=${label}@${lat},${lng}`,
+        android: `geo:0,0?q=${lat},${lng}(${label})`
+      }) || '';
+    } else if (addr) {
+      // Fallback to address search if no coordinates
+      const encodedAddr = encodeURIComponent(addr);
+      url = Platform.select({
+        ios: `maps:0,0?q=${encodedAddr}`,
+        android: `geo:0,0?q=${encodedAddr}`
+      }) || '';
+    }
+
+    if (url) {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        const webUrl = (lat && lng) 
+          ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
+          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr || '')}`;
+        await Linking.openURL(webUrl);
+      }
+    } else {
+      Alert.alert('Error', 'No address or coordinates available for this job.');
+    }
   };
 
   async function handleApply() {
     if (!job) return;
-    Alert.alert('Apply for this Job?', 'The customer will review your profile before approving you.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Apply', onPress: async () => {
+    Alert.alert('Apply for Task?', 'Are you sure you want to apply for this task?', [
+      { text: 'No', style: 'cancel' },
+      { text: 'Yes, Apply', onPress: async () => {
         setApplying(true);
         try {
           await applyForJob(job.id);
@@ -178,13 +271,8 @@ export default function EmployeeJobDetailScreen() {
                <Ionicons name={theme.icon as any} size={14} color="#fff" />
                <Text style={st.urgencyText}>{theme.label}</Text>
             </View>
-            <TouchableOpacity style={st.shareBtn} onPress={() => {
-              Share.share({
-                title: `CleanOps — ${job.size || 'Home'} Cleaning`,
-                message: `Job: ${job.size || 'Home'} Cleaning at ${job.location_address}\nPay: $${job.price_amount.toFixed(0)} (you earn $${estPayout.toFixed(2)})\nUrgency: ${job.urgency}`,
-              });
-            }}>
-              <Ionicons name="share-outline" size={20} color="#fff" />
+            <TouchableOpacity style={st.shareBtn} onPress={() => Alert.alert('Download Task Info', 'The task summary and address are being generated as a PDF...')}>
+              <Ionicons name="download-outline" size={20} color="#fff" />
             </TouchableOpacity>
           </View>
 
@@ -239,9 +327,9 @@ export default function EmployeeJobDetailScreen() {
 
            {/* Chat Section (Only if Active/Review) */}
            {(isInProgress || isPendingReview) && (
-             <View style={st.card}>
-                <Text style={st.cardTitle}>Chat</Text>
-                <Text style={st.chatEmptyText}>Click below to open chat</Text>
+             <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
+                <Text style={[st.cardTitle, { color: C.text1 }]}>Chat</Text>
+                <Text style={[st.chatEmptyText, { color: C.text3 }]}>Click below to open chat</Text>
                 <TouchableOpacity style={[st.openChatBtn, { backgroundColor: C.blue600 }]} onPress={() => setShowChat(true)}>
                    <Text style={st.openChatBtnText}>Open Chat Window</Text>
                    <Ionicons name="chatbubbles-outline" size={16} color="#fff" />
@@ -253,10 +341,24 @@ export default function EmployeeJobDetailScreen() {
            <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
               <View style={st.cardHeader}><Ionicons name="location" size={18} color={theme.primary} /><Text style={[st.cardTitle, { color: C.text1 }]}>Location</Text></View>
               <Text style={[st.addressText, { color: C.text2 }]}>{job.location_address}</Text>
-              <View style={[st.mapPlaceholder, { backgroundColor: C.surface2 }]}>
+              <View style={[st.mapPlaceholder, { backgroundColor: C.surface2, borderColor: C.divider }]}>
                  <LinearGradient colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.1)']} style={st.mapOverlay}>
                     <Ionicons name="navigate" size={32} color={theme.primary} />
-                    <Text style={[st.mapText, { color: C.text3 }]}>0.2 mi away</Text>
+                    <Text style={[st.mapText, { color: C.text3 }]}>
+                      {userLoc && job.location_lat && job.location_lng 
+                        ? `${calculateDistance(userLoc.lat, userLoc.lng, job.location_lat, job.location_lng).toFixed(1)} km away`
+                        : (job.location_lat ? `${job.distance?.toFixed(1)} km away` : 'Location pinned')}
+                    </Text>
+                    
+                    {(job.location_lat || job.location_address) && (
+                      <TouchableOpacity 
+                        style={[st.navigateBtn, { backgroundColor: theme.primary }]}
+                        onPress={handleNavigate}
+                      >
+                         <Ionicons name="map" size={14} color="#fff" />
+                         <Text style={st.navigateBtnText}>Navigate to Job</Text>
+                      </TouchableOpacity>
+                    )}
                  </LinearGradient>
               </View>
            </View>
@@ -276,9 +378,13 @@ export default function EmployeeJobDetailScreen() {
                         </TouchableOpacity>
                      </View>
                    ))}
-                   <TouchableOpacity style={[st.uploadBtn, { backgroundColor: C.surface2, borderColor: C.divider }]} onPress={pickImage}>
+                   <TouchableOpacity style={[st.uploadBtn, { backgroundColor: C.surface2, borderColor: C.divider }]} onPress={takePhoto}>
                       <Ionicons name="camera" size={24} color={C.blue600} />
-                      <Text style={[st.uploadText, { color: C.blue600 }]}>Add Photo</Text>
+                      <Text style={[st.uploadText, { color: C.blue600 }]}>Take Photo</Text>
+                   </TouchableOpacity>
+                   <TouchableOpacity style={[st.uploadBtn, { backgroundColor: C.surface2, borderColor: C.divider }]} onPress={pickImage}>
+                      <Ionicons name="image" size={24} color={C.blue600} />
+                      <Text style={[st.uploadText, { color: C.blue600 }]}>Gallery</Text>
                    </TouchableOpacity>
                 </View>
              </View>
@@ -293,7 +399,7 @@ export default function EmployeeJobDetailScreen() {
               {applying ? <ActivityIndicator color="#fff" /> : <><Text style={st.applyBtnText}>Apply for this Task</Text><Ionicons name="arrow-forward" size={18} color="#fff" /></>}
             </TouchableOpacity>
          ) : isApplied ? (
-            <View style={[st.appliedBtn, { backgroundColor: C.surface2 }]}>
+            <View style={[st.appliedBtn, { backgroundColor: C.surface2, borderColor: C.divider }]}>
                <Ionicons name="time" size={20} color={C.blue600} />
                <Text style={[st.appliedText, { color: C.text1 }]}>Awaiting Approval</Text>
             </View>
@@ -306,17 +412,17 @@ export default function EmployeeJobDetailScreen() {
               {submitting ? <ActivityIndicator color="#fff" /> : <Text style={st.applyBtnText}>Submit for Review</Text>}
             </TouchableOpacity>
          ) : isPendingReview ? (
-            <View style={[st.appliedBtn, { backgroundColor: C.surface2 }]}>
+            <View style={[st.appliedBtn, { backgroundColor: C.surface2, borderColor: C.divider }]}>
                <Ionicons name="eye" size={20} color="#f59e0b" />
                <Text style={[st.appliedText, { color: C.text1 }]}>Under Review</Text>
             </View>
          ) : isCompleted ? (
-            <View style={[st.appliedBtn, { backgroundColor: C.surface2 }]}>
+            <View style={[st.appliedBtn, { backgroundColor: C.surface2, borderColor: C.divider }]}>
                <Ionicons name="checkmark-circle" size={20} color={C.success} />
                <Text style={[st.appliedText, { color: C.text1 }]}>Job Completed</Text>
             </View>
          ) : (
-            <View style={[st.appliedBtn, { backgroundColor: C.surface2 }]}>
+            <View style={[st.appliedBtn, { backgroundColor: C.surface2, borderColor: C.divider }]}>
                <Ionicons name="alert-circle" size={20} color={C.text3} />
                <Text style={[st.appliedText, { color: C.text1 }]}>Status Unavailable</Text>
             </View>
@@ -378,6 +484,21 @@ const st = StyleSheet.create({
   mapPlaceholder: { height: 120, borderRadius: 16, overflow: 'hidden' },
   mapOverlay: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
   mapText: { fontSize: 12, fontWeight: '600' },
+  navigateBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8, 
+    paddingHorizontal: 16, 
+    paddingVertical: 10, 
+    borderRadius: 12, 
+    marginTop: 12,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4
+  },
+  navigateBtnText: { color: '#fff', fontSize: 13, fontWeight: '800' },
 
   subText: { fontSize: 13, lineHeight: 18 },
   imageGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },

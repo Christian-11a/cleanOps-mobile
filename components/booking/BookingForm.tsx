@@ -28,20 +28,6 @@ const { width } = Dimensions.get('window');
 const STEPS_ORDER: Step[] = ['type', 'tasks', 'instructions', 'location', 'urgency', 'review'];
 
 // Mock City Hall coordinates (Manila)
-const CITY_HALL = { lat: 14.5896, lng: 120.9813 };
-
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371; // km
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
-}
-
 export function BookingForm() {
   const router = useRouter();
   const { colors: C, isDark } = useTheme();
@@ -52,8 +38,9 @@ export function BookingForm() {
   const [cleanType, setCleanType] = useState<string>('regular');
   const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
   const [urgency, setUrgency] = useState<JobUrgency>('LOW');
-  const [address, setAddress] = useState('');
+  const [address, setAddress] = useState(profile?.location_address ?? '');
   const [distance, setDistance] = useState('');
+  const [coords, setCoords] = useState<{lat: number, lng: number} | null>(null);
   const [notes, setNotes] = useState('');
   const [mediaUris, setMediaUris] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -135,6 +122,8 @@ export function BookingForm() {
       }
 
       const loc = await Location.getCurrentPositionAsync({});
+      setCoords({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+
       const rev = await Location.reverseGeocodeAsync({
         latitude: loc.coords.latitude,
         longitude: loc.coords.longitude
@@ -146,10 +135,7 @@ export function BookingForm() {
         setAddress(formatted);
       }
 
-      const dist = calculateDistance(loc.coords.latitude, loc.coords.longitude, CITY_HALL.lat, CITY_HALL.lng);
-      setDistance(dist.toFixed(1));
-
-      Alert.alert('Location Found', 'Your address and distance have been updated.');
+      Alert.alert('Location Found', 'Your address has been updated.');
     } catch (e) {
       Alert.alert('Error', 'Could not fetch location. Please type it manually.');
     } finally {
@@ -199,8 +185,9 @@ export function BookingForm() {
         Alert.alert('Invalid Address', 'Please enter a complete address (e.g. 123 Main St, Brgy Central).');
         return;
       }
-      if (!isValidDistance(distance)) {
-        Alert.alert('Distance Required', 'Distance must be between 0.5km and 60km from City Hall.');
+      const dist = parseFloat(distance);
+      if (distance && (isNaN(dist) || dist < 0.1 || dist > 100.0)) {
+        Alert.alert('Invalid Radius', 'Search radius must be between 0.1km and 100km, or left blank.');
         return;
       }
     }
@@ -332,9 +319,11 @@ export function BookingForm() {
   }
 
   async function handlePostJob() {
-    const parsedDist = parseFloat(distance);
-    if (isNaN(parsedDist) || parsedDist <= 0) {
-      Alert.alert('Invalid distance', 'Please enter a valid distance from City Hall.');
+    const parsedDist = distance ? parseFloat(distance) : undefined;
+    
+    // If distance is provided, validate it's positive
+    if (distance && (isNaN(parsedDist!) || parsedDist! <= 0)) {
+      Alert.alert('Invalid distance', 'Please enter a valid search radius.');
       return;
     }
 
@@ -357,6 +346,8 @@ export function BookingForm() {
         urgency,
         address: address.trim(),
         distance: parsedDist,
+        latitude: coords?.lat,
+        longitude: coords?.lng,
         price,
         size: CLEAN_TYPES.find(t => t.id === cleanType)?.label || 'Regular',
         customInstructions: notes.trim(),
@@ -402,7 +393,7 @@ export function BookingForm() {
             <View style={st.successActions}>
               <TouchableOpacity style={[st.primaryBtn, { shadowColor: C.blue600 }]} onPress={() => router.replace('/customer/(tabs)/jobs' as any)}>
                 <LinearGradient colors={['#0ea5e9', '#0284c7']} style={st.btnGradient}>
-                  <Text style={st.primaryBtnText}>View My Jobs</Text>
+                  <Text style={st.primaryBtnText}>View My Bookings</Text>
                 </LinearGradient>
               </TouchableOpacity>
               
@@ -537,14 +528,34 @@ export function BookingForm() {
               <TextInput style={[st.textInput, { color: C.text1 }]} placeholder="Street name, Brgy, City..." placeholderTextColor={C.text3} value={address} onChangeText={setAddress} />
             </View>
 
-            <Text style={[st.inputLabel, { color: C.text3, marginBottom: 8 }]}>DISTANCE FROM CITY HALL (KM)</Text>
-            <View style={[st.inputRow, { backgroundColor: C.surface, borderColor: C.divider, marginBottom: 8 }]}>
+            <Text style={[st.inputLabel, { color: C.text3, marginBottom: 8 }]}>CLEANER SEARCH RADIUS (OPTIONAL)</Text>
+            <View style={[st.inputRow, { backgroundColor: C.surface, borderColor: (distance && (parseFloat(distance) > 100 || isNaN(parseFloat(distance)))) ? C.error : C.divider, marginBottom: 8 }]}>
               <Ionicons name="navigate" size={18} color={C.blue600} style={st.inputIcon} />
-              <TextInput style={[st.textInput, { color: C.text1 }]} placeholder="e.g. 5.5" placeholderTextColor={C.text3} value={distance} onChangeText={setDistance} keyboardType="decimal-pad" />
+              <TextInput 
+                style={[st.textInput, { color: C.text1 }]} 
+                placeholder="Show to all cleaners (No limit)" 
+                placeholderTextColor={C.text3} 
+                value={distance} 
+                onChangeText={(val) => {
+                  // Only allow numbers and one decimal point
+                  const filtered = val.replace(/[^0-9.]/g, '');
+                  // Prevent multiple decimals
+                  const parts = filtered.split('.');
+                  if (parts.length > 2) return;
+                  setDistance(filtered);
+                }} 
+                keyboardType="decimal-pad" 
+              />
             </View>
-            <Text style={{ fontSize: 11, color: C.text3, marginBottom: 24, fontStyle: 'italic' }}>
-              * Calculated from City Hall to ensure you are within our service range.
-            </Text>
+            {(distance && (parseFloat(distance) > 100 || isNaN(parseFloat(distance)))) ? (
+              <Text style={{ fontSize: 11, color: C.error, marginBottom: 24 }}>
+                * Please enter a valid number between 0.1 and 100.
+              </Text>
+            ) : (
+              <Text style={{ fontSize: 11, color: C.text3, marginBottom: 24, fontStyle: 'italic' }}>
+                * Leave blank to show to everyone, or enter 1-100km to limit visibility.
+              </Text>
+            )}
 
             <View style={[st.mapPlaceholder, { borderColor: C.divider }]}>
               <LinearGradient colors={isDark ? ['#050811', '#0a1120'] : ['#0a0f1e', '#0f1c2e']} style={st.mapBg}>
@@ -722,7 +733,7 @@ export function BookingForm() {
                       <>
                         <View style={st.inputSection}>
                           <Text style={[st.inputLabel, { color: C.text3 }]}>Card Number</Text>
-                          <View style={[st.amountInputContainer, { backgroundColor: '#f1f5f9' }, errors.cardNumber && { borderColor: C.error, borderWidth: 1 }]}>
+                          <View style={[st.amountInputContainer, { backgroundColor: C.surface2 }, errors.cardNumber && { borderColor: C.error, borderWidth: 1 }]}>
                             <Ionicons name="card-outline" size={20} color={errors.cardNumber ? C.error : C.text3} style={{ marginRight: 8 }} />
                             <TextInput
                               style={[st.amountInput, { color: C.text1, fontSize: 16 }]}
@@ -740,7 +751,7 @@ export function BookingForm() {
                         <View style={{ flexDirection: 'row', gap: 12 }}>
                           <View style={[st.inputSection, { flex: 1 }]}>
                             <Text style={[st.inputLabel, { color: C.text3 }]}>Expiry (MM/YY)</Text>
-                            <View style={[st.amountInputContainer, { backgroundColor: '#f1f5f9' }, errors.expiry && { borderColor: C.error, borderWidth: 1 }]}>
+                            <View style={[st.amountInputContainer, { backgroundColor: C.surface2 }, errors.expiry && { borderColor: C.error, borderWidth: 1 }]}>
                               <TextInput
                                 style={[st.amountInput, { color: C.text1, fontSize: 16 }]}
                                 placeholder="12/28"
@@ -753,7 +764,7 @@ export function BookingForm() {
                           </View>
                           <View style={[st.inputSection, { flex: 1 }]}>
                             <Text style={[st.inputLabel, { color: C.text3 }]}>CVC</Text>
-                            <View style={[st.amountInputContainer, { backgroundColor: '#f1f5f9' }, errors.cvc && { borderColor: C.error, borderWidth: 1 }]}>
+                            <View style={[st.amountInputContainer, { backgroundColor: C.surface2 }, errors.cvc && { borderColor: C.error, borderWidth: 1 }]}>
                               <TextInput
                                 style={[st.amountInput, { color: C.text1, fontSize: 16 }]}
                                 placeholder="123"
@@ -770,7 +781,7 @@ export function BookingForm() {
 
                         <View style={st.inputSection}>
                           <Text style={[st.inputLabel, { color: C.text3 }]}>Cardholder Name</Text>
-                          <View style={[st.amountInputContainer, { backgroundColor: '#f1f5f9' }, errors.cardholderName && { borderColor: C.error, borderWidth: 1 }]}>
+                          <View style={[st.amountInputContainer, { backgroundColor: C.surface2 }, errors.cardholderName && { borderColor: C.error, borderWidth: 1 }]}>
                             <TextInput
                               style={[st.amountInput, { color: C.text1, fontSize: 16 }]}
                               placeholder="John Doe"
@@ -784,7 +795,7 @@ export function BookingForm() {
                     ) : (
                       <View style={st.inputSection}>
                         <Text style={[st.inputLabel, { color: C.text3 }]}>{cardBrand} Mobile Number</Text>
-                        <View style={[st.amountInputContainer, { backgroundColor: '#f1f5f9' }, errors.phoneNumber && { borderColor: C.error, borderWidth: 1 }]}>
+                        <View style={[st.amountInputContainer, { backgroundColor: C.surface2 }, errors.phoneNumber && { borderColor: C.error, borderWidth: 1 }]}>
                           <Text style={{ fontSize: 16, fontWeight: '700', color: C.text1, marginRight: 8 }}>+63</Text>
                           <TextInput
                             style={[st.amountInput, { color: C.text1, fontSize: 16 }]}
@@ -809,13 +820,13 @@ export function BookingForm() {
                 ) : (
                   <View style={{ gap: 20 }}>
                     <View style={{ alignItems: 'center', gap: 8 }}>
-                      <View style={[st.otpIconCircle, { backgroundColor: '#f0f9ff' }]}>
+                      <View style={[st.otpIconCircle, { backgroundColor: isDark ? '#0c4a6e30' : '#f0f9ff' }]}>
                         <Ionicons name="chatbubble-ellipses-outline" size={32} color={C.blue600} />
                       </View>
                       <Text style={[st.otpTitle, { color: C.text1 }]}>Verify your number</Text>
                       <Text style={[st.otpSub, { color: C.text3 }]}>Enter the 6-digit code sent to +63 {phoneNumber}</Text>
                     </View>
-                    <View style={[st.amountInputContainer, { backgroundColor: '#f1f5f9', justifyContent: 'center' }]}>
+                    <View style={[st.amountInputContainer, { backgroundColor: C.surface2, justifyContent: 'center' }]}>
                       <TextInput
                         style={[st.amountInput, { color: C.text1, fontSize: 24, letterSpacing: 12, textAlign: 'center' }]}
                         placeholder="000000"
@@ -879,6 +890,9 @@ const st = StyleSheet.create({
   inputRow: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 16, borderWidth: 1, marginBottom: 16 },
   inputIcon: { marginRight: 10 },
   textInput: { flex: 1, fontSize: 14 },
+  inputSection: { marginBottom: 20 },
+  helperText: { fontSize: 12, marginTop: 4, lineHeight: 18 },
+  otpIconCircle: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', alignSelf: 'center', marginBottom: 16 },
   mapPlaceholder: { height: 160, borderRadius: 24, overflow: 'hidden', marginBottom: 24, borderWidth: 1 },
   mapBg: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   mapOverlay: { alignItems: 'center' },

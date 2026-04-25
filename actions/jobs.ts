@@ -15,7 +15,9 @@ export async function createJob(jobData: {
   tasks: string[];
   urgency: JobUrgency;
   address: string;
-  distance: number;
+  distance?: number;
+  latitude?: number;
+  longitude?: number;
   price: number;
   size: string;
   customInstructions?: string;
@@ -47,7 +49,9 @@ export async function createJob(jobData: {
       customer_phone: profile?.phone,
       urgency: jobData.urgency,
       location_address: jobData.address,
-      distance: jobData.distance,
+      location_lat: jobData.latitude,
+      location_lng: jobData.longitude,
+      distance: jobData.distance || null,
       price_amount: jobData.price,
       status: 'OPEN',
       tasks: tasksWithMeta,
@@ -113,7 +117,7 @@ export async function getOpenJobs(): Promise<Job[]> {
     .from('jobs')
     .select('*')
     .eq('status', 'OPEN')
-    .is('worker_id', null)
+    .is('worker_id', null) // Only show if not yet approved/assigned
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -128,7 +132,7 @@ export async function getEmployeeJobs(status?: JobStatus): Promise<Job[]> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
 
-  // Column is worker_id not employee_id
+  // 1. Fetch jobs where the user is the assigned worker
   let query = (supabase as any)
     .from('jobs')
     .select('*')
@@ -137,9 +141,67 @@ export async function getEmployeeJobs(status?: JobStatus): Promise<Job[]> {
 
   if (status) query = query.eq('status', status);
 
-  const { data, error } = await query;
+  const { data: workerJobs, error: workerErr } = await query;
+  if (workerErr) throw workerErr;
+
+  // 2. Fetch jobs where the user has a pending application
+  // Only do this if no specific status is requested or status is 'OPEN' (as applied jobs are still OPEN)
+  if (!status || status === 'OPEN') {
+    const { data: apps, error: appErr } = await (supabase as any)
+      .from('job_applications')
+      .select('job_id, status, jobs(*)')
+      .eq('employee_id', user.id);
+
+    if (appErr) throw appErr;
+
+    const appliedJobs = (apps || [])
+      .filter((a: any) => a.jobs && a.jobs.worker_id !== user.id)
+      .map((a: any) => ({
+        ...normalizeJob(a.jobs),
+        application_status: a.status // 'PENDING', 'ACCEPTED', etc.
+      }));
+
+    // Combine results
+    const results = [...(workerJobs || []).map(normalizeJob), ...appliedJobs];
+    // Remove potential duplicates
+    return results.filter((job, index, self) => 
+      index === self.findIndex((t) => t.id === job.id)
+    );
+  }
+
+  return (workerJobs ?? []).map(normalizeJob);
+}
+
+export async function getJobApplicants(jobId: string) {
+  const { data, error } = await (supabase as any)
+    .from('job_applications')
+    .select(`
+      *,
+      profiles:employee_id (
+        id,
+        full_name,
+        rating,
+        phone,
+        created_at
+      )
+    `)
+    .eq('job_id', jobId);
+
   if (error) throw error;
-  return (data ?? []).map(normalizeJob);
+  return data;
+}
+
+export async function getEmployeeApplications(): Promise<string[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data, error } = await (supabase as any)
+    .from('job_applications')
+    .select('job_id')
+    .eq('employee_id', user.id);
+
+  if (error) return [];
+  return data.map((a: any) => a.job_id);
 }
 
 export async function getAllJobs(): Promise<Job[]> {
@@ -206,45 +268,37 @@ export async function applyForJob(jobId: string): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Unauthorized');
 
+  // Verify job is still OPEN and not already assigned
   const { data: job, error: jobErr } = await (supabase as any)
     .from('jobs')
-    .select('status, worker_id, worker_name')
+    .select('status, worker_id')
     .eq('id', jobId)
     .single();
 
   if (jobErr) throw new Error(`Could not verify job status: ${jobErr.message}`);
+  if (!job || job.status !== 'OPEN') throw new Error('This job is no longer open for applications.');
+  if (job.worker_id) throw new Error('This job already has an assigned cleaner.');
 
-  if (!job || job.status !== 'OPEN') {
-    throw new Error('This job is no longer open for applications.');
-  }
-
-  if (job.worker_id) {
-    throw new Error('This job already has an assigned cleaner.');
-  }
-
-  // Prevent overwriting another applicant's pending application
-  if (job.worker_name) {
-    throw new Error('Another cleaner has already applied. Please try a different job.');
-  }
-
-  const { data: profile, error: profErr } = await (supabase as any)
-    .from('profiles')
-    .select('full_name, phone')
-    .eq('id', user.id)
+  // Check if already applied
+  const { data: existingApp } = await (supabase as any)
+    .from('job_applications')
+    .select('id')
+    .eq('job_id', jobId)
+    .eq('employee_id', user.id)
     .single();
 
-  if (profErr) throw new Error('Could not fetch your profile. Please check your settings.');
+  if (existingApp) throw new Error('You have already applied for this job.');
 
-  const { error: updateErr } = await (supabase as any)
-    .from('jobs')
-    .update({
-      worker_id:    user.id,
-      worker_name:  profile?.full_name || 'Cleaner',
-      worker_phone: profile?.phone     || 'N/A',
-    })
-    .eq('id', jobId);
+  // Insert into job_applications table
+  const { error: appErr } = await (supabase as any)
+    .from('job_applications')
+    .insert([{
+      job_id: jobId,
+      employee_id: user.id,
+      status: 'PENDING'
+    }]);
 
-  if (updateErr) throw new Error(`Application failed: ${updateErr.message}`);
+  if (appErr) throw new Error(`Application failed: ${appErr.message}`);
 }
 
 export async function approveApplication(jobId: string, employeeId: string): Promise<void> {
@@ -388,5 +442,20 @@ function normalizeJob(raw: any): Job {
     employee_phone: raw.worker_phone, // map worker_phone to employee_phone for our type
     customer_phone: raw.customer_phone,
   } as Job;
+}
+
+export async function hasEmployeeAppliedToJob(jobId: string): Promise<boolean> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  const { data, error } = await (supabase as any)
+    .from('job_applications')
+    .select('id')
+    .eq('job_id', jobId)
+    .eq('employee_id', user.id)
+    .maybeSingle();
+
+  if (error) return false;
+  return !!data;
 }
 

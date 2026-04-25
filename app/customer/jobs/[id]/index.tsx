@@ -7,7 +7,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { getJob, approveJobCompletion, cancelJob, approveApplication, rejectApplication } from '@/actions/jobs';
+import { getJob, approveJobCompletion, cancelJob, approveApplication, rejectApplication, getJobApplicants } from '@/actions/jobs';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/themeContext';
 import { useAuth } from '@/lib/authContext';
@@ -32,13 +32,13 @@ export default function CustomerJobDetailScreen() {
   const insets = useSafeAreaInsets();
   const toast = useToast();
   const [job,            setJob]           = useState<Job | null>(null);
+  const [applicants,     setApplicants]    = useState<any[]>([]);
   const [loading,        setLoading]       = useState(true);
   const [approving,      setApproving]     = useState(false);
   const [cancelling,     setCancelling]    = useState(false);
   const [rejecting,      setRejecting]     = useState(false);
   const [showChat,       setShowChat]      = useState(false);
   const [selectedImage,  setSelectedImage] = useState<string | null>(null);
-  const [applicantRating, setApplicantRating] = useState<number | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [applicantProfile, setApplicantProfile] = useState<{
     full_name: string; rating: number | null; phone: string | null;
@@ -48,10 +48,14 @@ export default function CustomerJobDetailScreen() {
 
   async function fetchJob() {
     try {
-      const data = await getJob(id);
-      setJob(data);
+      const [jobData, applicantsData] = await Promise.all([
+        getJob(id),
+        getJobApplicants(id)
+      ]);
+      setJob(jobData);
+      setApplicants(applicantsData || []);
     } catch (err) {
-      console.warn(err);
+      if (__DEV__) console.warn(err);
     } finally {
       setLoading(false);
     }
@@ -70,37 +74,26 @@ export default function CustomerJobDetailScreen() {
 
   useEffect(() => { fetchJob(); }, [id]);
 
-  // Fetch applicant's real rating once we have their worker_id
-  useEffect(() => {
-    const workerId = (job as any)?.worker_id;
-    if (!workerId || job?.status !== 'OPEN') return;
-    (supabase as any)
-      .from('profiles')
-      .select('rating')
-      .eq('id', workerId)
-      .single()
-      .then(({ data }: any) => {
-        if (data?.rating) setApplicantRating(Number(data.rating));
-      });
-  }, [(job as any)?.worker_id, job?.status]);
+  async function handleApproveCleaner(applicant: any) {
+    const workerId = applicant.employee_id;
+    const workerName = applicant.profiles?.full_name;
+    if (!workerId || !workerName) return;
 
-  async function handleApproveCleaner() {
-    if (!job?.employee_name) return;
-    const workerId = (job as any).worker_id;
-    if (!workerId) {
-      Alert.alert('Cannot Approve', 'The applicant ID is missing. The cleaner may need to reapply.');
-      return;
-    }
-    setApproving(true);
-    try {
-      await approveApplication(id, workerId);
-      await fetchJob();
-      toast.show('Cleaner approved! Job is now In Progress.');
-    } catch (err: any) {
-      Alert.alert('Error', err.message);
-    } finally {
-      setApproving(false);
-    }
+    Alert.alert('Approve Cleaner?', `Are you sure you want to hire ${workerName}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Approve & Hire', onPress: async () => {
+        setApproving(true);
+        try {
+          await approveApplication(id, workerId);
+          await fetchJob();
+          toast.show(`Cleaner approved! ${workerName} is now on the way.`);
+        } catch (err: any) {
+          Alert.alert('Error', err.message);
+        } finally {
+          setApproving(false);
+        }
+      }},
+    ]);
   }
 
   async function handleApprove() {
@@ -110,7 +103,8 @@ export default function CustomerJobDetailScreen() {
         setApproving(true);
         try {
           await approveJobCompletion(id);
-          setJob(await getJob(id));
+          const data = await getJob(id);
+          setJob(data);
           await refreshProfile();
           toast.show('Payment released to the cleaner.');
         } catch (err: any) { Alert.alert('Error', err.message); }
@@ -120,13 +114,14 @@ export default function CustomerJobDetailScreen() {
   }
 
   async function handleCancel() {
-    Alert.alert('Cancel Request?', 'This cannot be undone.', [
-      { text: 'Keep', style: 'cancel' },
-      { text: 'Cancel', style: 'destructive', onPress: async () => {
+    Alert.alert('Cancel Booking?', 'Are you sure you want to cancel this request?', [
+      { text: 'No', style: 'cancel' },
+      { text: 'Yes, Cancel', style: 'destructive', onPress: async () => {
         setCancelling(true);
         try {
           await cancelJob(id);
-          setJob(await getJob(id));
+          const data = await getJob(id);
+          setJob(data);
           await refreshProfile();
         } catch (err: any) { Alert.alert('Error', err.message); }
         finally { setCancelling(false); }
@@ -134,29 +129,31 @@ export default function CustomerJobDetailScreen() {
     ]);
   }
 
-  async function handleReject() {
-    Alert.alert('Reject Applicant?', 'This will remove the current applicant and reopen the job for others.', [
+  async function handleReject(applicant: any) {
+    const workerName = applicant.profiles?.full_name || 'this applicant';
+    Alert.alert('Reject Applicant?', `Are you sure you want to reject ${workerName}?`, [
       { text: 'Keep', style: 'cancel' },
       { text: 'Reject', style: 'destructive', onPress: async () => {
         setRejecting(true);
         try {
-          await rejectApplication(id);
-          setApplicantRating(null);
-          setApplicantProfile(null);
-          setJob(await getJob(id));
-          toast.show('Applicant removed. Job is open again.');
+          // Reject is handled by deleting the application record or updating status
+          await (supabase as any).from('job_applications').delete().eq('id', applicant.id);
+          await fetchJob();
+          toast.show('Applicant removed.');
         } catch (err: any) { Alert.alert('Error', err.message); }
         finally { setRejecting(false); }
       }},
     ]);
   }
 
-  async function handleViewProfile() {
-    const workerId = (job as any)?.worker_id;
+  async function handleViewProfile(applicant: any) {
+    const workerId = applicant.employee_id;
     if (!workerId) return;
+    
+    setApplicantProfile(null);
     setShowProfileModal(true);
-    if (applicantProfile) return; // already loaded
     setLoadingProfile(true);
+    
     try {
       const [{ data: prof }, { count }] = await Promise.all([
         (supabase as any).from('profiles').select('full_name, rating, phone, created_at').eq('id', workerId).single(),
@@ -170,7 +167,7 @@ export default function CustomerJobDetailScreen() {
         jobs_completed: count ?? 0,
       });
     } catch (e) {
-      console.warn(e);
+      if (__DEV__) console.warn(e);
     } finally {
       setLoadingProfile(false);
     }
@@ -183,26 +180,23 @@ export default function CustomerJobDetailScreen() {
   };
 
   if (loading) return (
-    <View style={[st.container, { backgroundColor: '#f0f4f8' }]}><View style={st.center}><ActivityIndicator size="large" color={C.blue600} /></View></View>
+    <View style={[st.container, { backgroundColor: C.bg }]}><View style={st.center}><ActivityIndicator size="large" color={C.blue600} /></View></View>
   );
   if (!job) return (
-    <View style={[st.container, { backgroundColor: '#f0f4f8' }]}><View style={st.center}><Text style={{ color: C.text3 }}>Job not found</Text></View></View>
+    <View style={[st.container, { backgroundColor: C.bg }]}><View style={st.center}><Text style={{ color: C.text3 }}>Job not found</Text></View></View>
   );
 
   const price = Number(job.price_amount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   const isUrgent = job.urgency === 'HIGH';
   const urgencyColor = isUrgent ? '#ef4444' : job.urgency === 'NORMAL' ? '#f59e0b' : '#22c55e';
-  const urgencyText  = isUrgent ? '#b91c1c' : job.urgency === 'NORMAL' ? '#92400e' : '#166534';
+  const urgencyText  = isUrgent ? (isDark ? '#fecaca' : '#b91c1c') : job.urgency === 'NORMAL' ? (isDark ? '#fef3c7' : '#92400e') : (isDark ? '#dcfce7' : '#166534');
   const urgencyLabel = isUrgent ? 'Urgent Priority' : job.urgency === 'NORMAL' ? 'Medium Priority' : 'Standard Priority';
 
   const currentStepIdx = STEPS.findIndex(s => s.id === job.status);
   const taskCount = job.tasks?.length || 0;
-  const ratingDisplay = applicantRating !== null
-    ? `${applicantRating.toFixed(1)} ⭐ • ${applicantRating >= 4.5 ? 'Excellent' : applicantRating >= 4 ? 'Great' : 'Good'}`
-    : 'New Cleaner';
 
   return (
-    <View style={[st.container, { backgroundColor: '#f0f4f8' }]}>
+    <View style={[st.container, { backgroundColor: C.bg }]}>
       <StatusBar barStyle="light-content" />
 
       {/* Gradient Header */}
@@ -218,8 +212,8 @@ export default function CustomerJobDetailScreen() {
           </TouchableOpacity>
           <View style={st.headerTextWrap}>
             <Text style={st.headerTitle} numberOfLines={1}>{job.tasks?.[0] || 'Regular Clean'}</Text>
-            <View style={st.statusPill}>
-               <Text style={st.statusPillText}>{SC[job.status]?.label || 'Open'}</Text>
+            <View style={[st.statusPill, { backgroundColor: SC[job.status]?.bg || '#dbeafe' }]}>
+               <Text style={[st.statusPillText, { color: SC[job.status]?.text || '#1d4ed8' }]}>{SC[job.status]?.label || 'Open'}</Text>
             </View>
           </View>
           <Text style={st.headerPrice}>${price}</Text>
@@ -227,29 +221,29 @@ export default function CustomerJobDetailScreen() {
       </LinearGradient>
 
       {showChat ? (
-        <View style={st.chatContainer}>
+        <View style={[st.chatContainer, { backgroundColor: C.bg }]}>
           <ChatWindow jobId={id} />
         </View>
       ) : (
         <ScrollView contentContainerStyle={[st.scroll, { paddingBottom: insets.bottom + 100 }]} showsVerticalScrollIndicator={false}>
           
           {/* Job Progress */}
-          <View style={st.card}>
-            <Text style={st.cardTitle}>Job Progress</Text>
+          <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
+            <Text style={[st.cardTitle, { color: C.text1 }]}>Job Progress</Text>
             <View style={st.stepperContainer}>
                {STEPS.map((step, idx) => {
                  const isCompleted = currentStepIdx >= idx;
                  return (
                    <View key={step.id} style={st.stepWrapper}>
                       <View style={st.stepNode}>
-                         <View style={[st.stepCircle, isCompleted ? st.stepCircleActive : st.stepCircleInactive]}>
-                            <View style={[st.stepInnerDot, isCompleted ? st.stepInnerDotActive : st.stepInnerDotInactive]} />
+                         <View style={[st.stepCircle, isCompleted ? st.stepCircleActive : { backgroundColor: C.surface2 }]}>
+                            <View style={[st.stepInnerDot, isCompleted ? st.stepInnerDotActive : { backgroundColor: C.text3 + '40' }]} />
                          </View>
-                         <Text style={[st.stepLabel, isCompleted ? st.stepLabelActive : st.stepLabelInactive]}>{step.label}</Text>
+                         <Text style={[st.stepLabel, isCompleted ? st.stepLabelActive : { color: C.text3 }]}>{step.label}</Text>
                       </View>
                       {idx < STEPS.length - 1 && (
                         <View style={st.stepLineWrapper}>
-                          <View style={[st.stepLine, currentStepIdx > idx ? st.stepLineActive : st.stepLineInactive]} />
+                          <View style={[st.stepLine, currentStepIdx > idx ? st.stepLineActive : { backgroundColor: C.divider }]} />
                         </View>
                       )}
                    </View>
@@ -259,12 +253,12 @@ export default function CustomerJobDetailScreen() {
           </View>
 
           {/* Details */}
-          <View style={st.card}>
-            <Text style={st.cardTitle}>Details</Text>
+          <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
+            <Text style={[st.cardTitle, { color: C.text1 }]}>Details</Text>
             
             <View style={st.detailRow}>
-              <Ionicons name="location-outline" size={14} color="#3f3f46" />
-              <Text style={st.detailText}>{job.location_address || 'Address not set'}</Text>
+              <Ionicons name="location-outline" size={14} color={C.text2} />
+              <Text style={[st.detailText, { color: C.text2 }]}>{job.location_address || 'Address not set'}</Text>
             </View>
             
             <View style={st.detailRow}>
@@ -272,24 +266,24 @@ export default function CustomerJobDetailScreen() {
               <Text style={[st.urgencyText, { color: urgencyText }]}>{urgencyLabel}</Text>
             </View>
 
-            <Text style={[st.tasksProgressLabel, { marginBottom: 8 }]}>{taskCount} task{taskCount !== 1 ? 's' : ''} requested</Text>
+            <Text style={[st.tasksProgressLabel, { color: C.text3, marginBottom: 8 }]}>{taskCount} task{taskCount !== 1 ? 's' : ''} requested</Text>
 
             {job.tasks?.map((t, i) => (
                <View key={i} style={st.taskItem}>
-                 <View style={st.taskCheckbox} />
-                 <Text style={st.taskText}>🧺 {t}</Text>
+                 <View style={[st.taskCheckbox, { borderColor: C.divider, backgroundColor: C.surface2 }]} />
+                 <Text style={[st.taskText, { color: C.text1 }]}>🧺 {t}</Text>
                </View>
             ))}
           </View>
 
           {/* Proof of work */}
           {job.proof_urls && job.proof_urls.length > 0 && (
-            <View style={st.card}>
-              <Text style={st.cardTitle}>Proof of Work</Text>
+            <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
+              <Text style={[st.cardTitle, { color: C.text1 }]}>Proof of Work</Text>
               {job.proof_description ? (
                 <View style={[st.commentBox, { backgroundColor: C.surface2 }]}>
                   <Text style={[st.commentLabel, { color: C.text3 }]}>CLEANER'S COMMENT</Text>
-                  <Text style={st.detailText}>{job.proof_description}</Text>
+                  <Text style={[st.detailText, { color: C.text2 }]}>{job.proof_description}</Text>
                 </View>
               ) : null}
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginTop: 8}}>
@@ -303,10 +297,10 @@ export default function CustomerJobDetailScreen() {
           )}
 
           {/* Chat Preview / Toggle */}
-          <View style={st.card}>
-            <Text style={st.cardTitle}>Chat</Text>
-            <Text style={st.chatEmptyText}>Click below to open chat</Text>
-            <TouchableOpacity style={st.openChatBtn} onPress={() => setShowChat(true)}>
+          <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
+            <Text style={[st.cardTitle, { color: C.text1 }]}>Chat</Text>
+            <Text style={[st.chatEmptyText, { color: C.text3 }]}>Click below to open chat</Text>
+            <TouchableOpacity style={[st.openChatBtn, { backgroundColor: C.blue600 }]} onPress={() => setShowChat(true)}>
                <Text style={st.openChatBtnText}>Open Chat Window</Text>
                <Ionicons name="chatbubbles-outline" size={16} color="#fff" />
             </TouchableOpacity>
@@ -314,61 +308,101 @@ export default function CustomerJobDetailScreen() {
 
           {/* Applications Section */}
           {job.status === 'OPEN' && (
-            <View style={st.card}>
-              <Text style={st.cardTitle}>Interested Cleaners</Text>
-              {job.employee_name ? (
-                <View style={st.applicantCard}>
-                  <TouchableOpacity style={st.applicantInfo} onPress={handleViewProfile} activeOpacity={0.75}>
-                    <View style={st.avatarPlaceholder}>
-                      <Ionicons name="person" size={20} color="#94a3b8" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={st.applicantName}>{job.employee_name}</Text>
-                      <View style={st.ratingRow}>
-                        {applicantRating !== null && <Ionicons name="star" size={12} color="#fbbf24" />}
-                        <Text style={st.ratingText}>{ratingDisplay}</Text>
+            <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
+              <Text style={[st.cardTitle, { color: C.text1 }]}>Interested Cleaners ({applicants.length})</Text>
+              
+              {applicants.length > 0 ? (
+                applicants.map((applicant) => {
+                  const rating = applicant.profiles?.rating;
+                  const ratingDisplay = rating 
+                    ? `${Number(rating).toFixed(1)} ⭐` 
+                    : 'New Cleaner';
+
+                  return (
+                    <View key={applicant.id} style={[st.applicantCard, { backgroundColor: C.surface2, borderColor: C.divider, marginBottom: 12 }]}>
+                      <TouchableOpacity 
+                        style={st.applicantInfo} 
+                        onPress={() => handleViewProfile(applicant)} 
+                        activeOpacity={0.75}
+                      >
+                        <View style={[st.avatarPlaceholder, { backgroundColor: isDark ? C.bg : '#f1f5f9' }]}>
+                          <Ionicons name="person" size={20} color={C.text3} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[st.applicantName, { color: C.text1 }]}>{applicant.profiles?.full_name || 'Anonymous'}</Text>
+                          <View style={st.ratingRow}>
+                            <Ionicons name="star" size={12} color="#fbbf24" />
+                            <Text style={[st.ratingText, { color: C.text3 }]}>{ratingDisplay}</Text>
+                          </View>
+                        </View>
+                        <View style={[st.viewProfilePill, { backgroundColor: isDark ? C.blue800 + '40' : '#e0f2fe' }]}>
+                          <Text style={[st.viewProfileText, { color: isDark ? C.blue400 : '#0284c7' }]}>View Profile</Text>
+                          <Ionicons name="chevron-forward" size={12} color={isDark ? C.blue400 : '#0284c7'} />
+                        </View>
+                      </TouchableOpacity>
+
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <TouchableOpacity
+                          style={[st.rejectBtn, { backgroundColor: isDark ? C.error + '15' : '#fff1f2', borderColor: isDark ? C.error + '40' : '#fca5a5' }, rejecting && st.disabled]}
+                          onPress={() => handleReject(applicant)}
+                          disabled={rejecting || approving}
+                        >
+                          {rejecting ? <ActivityIndicator color={C.error} size="small" /> : <Text style={[st.rejectBtnText, { color: C.error }]}>Reject</Text>}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[st.approveCleanerBtn, { flex: 1 }, approving && st.disabled]}
+                          onPress={() => handleApproveCleaner(applicant)}
+                          disabled={approving || rejecting}
+                        >
+                          <LinearGradient colors={['#0ea5e9', '#0284c7']} style={st.btnGradient}>
+                            {approving ? <ActivityIndicator color="#fff" /> : <Text style={st.approveCleanerText}>Approve & Hire</Text>}
+                          </LinearGradient>
+                        </TouchableOpacity>
                       </View>
                     </View>
-                    <View style={st.viewProfilePill}>
-                      <Text style={st.viewProfileText}>View Profile</Text>
-                      <Ionicons name="chevron-forward" size={12} color="#0284c7" />
-                    </View>
-                  </TouchableOpacity>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <TouchableOpacity
-                      style={[st.rejectBtn, rejecting && st.disabled]}
-                      onPress={handleReject}
-                      disabled={rejecting || approving}
-                    >
-                      {rejecting ? <ActivityIndicator color="#ef4444" size="small" /> : <Text style={st.rejectBtnText}>Reject</Text>}
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[st.approveCleanerBtn, { flex: 1 }, approving && st.disabled]}
-                      onPress={handleApproveCleaner}
-                      disabled={approving || rejecting}
-                    >
-                      <LinearGradient colors={['#0ea5e9', '#0284c7']} style={st.btnGradient}>
-                        {approving ? <ActivityIndicator color="#fff" /> : <Text style={st.approveCleanerText}>Approve & Hire</Text>}
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                  );
+                })
               ) : (
                 <View style={st.emptyApplicants}>
                    <ActivityIndicator size="small" color={C.blue600} />
-                   <Text style={st.emptyApplicantsText}>Waiting for cleaners to apply…</Text>
+                   <Text style={[st.emptyApplicantsText, { color: C.text3 }]}>Waiting for cleaners to apply…</Text>
                 </View>
               )}
             </View>
           )}
 
+          {/* Assigned Cleaner (when IN_PROGRESS or later) */}
+          {job.status !== 'OPEN' && job.employee_name && (
+            <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
+              <Text style={[st.cardTitle, { color: C.text1 }]}>Your Cleaner</Text>
+              <View style={[st.applicantCard, { backgroundColor: C.surface2, borderColor: C.divider }]}>
+                 <TouchableOpacity 
+                    style={st.applicantInfo} 
+                    onPress={() => handleViewProfile({ employee_id: job.employee_id })} 
+                    activeOpacity={0.75}
+                  >
+                    <View style={[st.avatarPlaceholder, { backgroundColor: isDark ? C.bg : '#f1f5f9' }]}>
+                      <Ionicons name="person" size={20} color={C.text3} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[st.applicantName, { color: C.text1 }]}>{job.employee_name}</Text>
+                      <Text style={[st.ratingText, { color: C.text3 }]}>Assigned Cleaner</Text>
+                    </View>
+                    <TouchableOpacity style={[st.viewProfilePill, { backgroundColor: isDark ? C.blue800 + '40' : '#e0f2fe' }]} onPress={() => handleViewProfile({ employee_id: job.employee_id })}>
+                      <Text style={[st.viewProfileText, { color: isDark ? C.blue400 : '#0284c7' }]}>View Profile</Text>
+                    </TouchableOpacity>
+                 </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           {/* Approve */}
           {job.status === 'PENDING_REVIEW' && (
-            <View style={[st.card, { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }]}>
-              <Text style={[st.cardTitle, { color: '#166534' }]}>Ready for Review</Text>
-              <Text style={{ fontSize: 13, color: '#15803d', marginBottom: 12 }}>Cleaner marked this job as done. Review and approve to release payment.</Text>
+            <View style={[st.card, { backgroundColor: isDark ? C.success + '15' : '#f0fdf4', borderColor: isDark ? C.success + '40' : '#bbf7d0' }]}>
+              <Text style={[st.cardTitle, { color: isDark ? C.success : '#166534' }]}>Ready for Review</Text>
+              <Text style={{ fontSize: 13, color: isDark ? C.text2 : '#15803d', marginBottom: 12 }}>Cleaner marked this job as done. Review and approve to release payment.</Text>
               <TouchableOpacity
-                style={[st.approveBtn, { backgroundColor: '#16a34a' }, approving && st.disabled]}
+                style={[st.approveBtn, { backgroundColor: C.success }, approving && st.disabled]}
                 onPress={handleApprove}
                 disabled={approving}
               >
@@ -386,11 +420,11 @@ export default function CustomerJobDetailScreen() {
           {/* Cancel */}
           {job.status === 'OPEN' && (
             <TouchableOpacity
-              style={[st.cancelBtn, cancelling && st.disabled]}
+              style={[st.cancelBtn, { backgroundColor: isDark ? C.error + '15' : '#fff1f2', borderColor: isDark ? C.error + '40' : '#fecdd3' }, cancelling && st.disabled]}
               onPress={handleCancel}
               disabled={cancelling}
             >
-              <Text style={st.cancelBtnText}>{cancelling ? 'Cancelling…' : 'Cancel Job'}</Text>
+              <Text style={[st.cancelBtnText, { color: C.error }]}>{cancelling ? 'Cancelling…' : 'Cancel Job'}</Text>
             </TouchableOpacity>
           )}
         </ScrollView>
@@ -399,10 +433,10 @@ export default function CustomerJobDetailScreen() {
       {/* Applicant Profile Modal */}
       <Modal visible={showProfileModal} transparent animationType="slide" onRequestClose={() => setShowProfileModal(false)}>
         <TouchableOpacity style={st.modalOverlay} activeOpacity={1} onPress={() => setShowProfileModal(false)}>
-          <View style={[st.profileSheet, { backgroundColor: '#fff' }]} onStartShouldSetResponder={() => true}>
+          <View style={[st.profileSheet, { backgroundColor: C.surface }]} onStartShouldSetResponder={() => true}>
             <LinearGradient colors={['#0c4a6e', '#0284c7']} style={st.profileHeader}>
-              <View style={st.profileAvatarLarge}>
-                <Ionicons name="person" size={36} color="#94a3b8" />
+              <View style={[st.profileAvatarLarge, { backgroundColor: isDark ? C.bg : '#f1f5f9' }]}>
+                <Ionicons name="person" size={36} color={C.text3} />
               </View>
               <Text style={st.profileName}>{applicantProfile?.full_name || job?.employee_name || '—'}</Text>
               {applicantProfile?.rating !== null && applicantProfile?.rating !== undefined ? (
@@ -417,50 +451,50 @@ export default function CustomerJobDetailScreen() {
 
             <View style={st.profileBody}>
               {loadingProfile ? (
-                <ActivityIndicator color="#0284c7" style={{ marginVertical: 24 }} />
+                <ActivityIndicator color={C.blue600} style={{ marginVertical: 24 }} />
               ) : (
                 <>
-                  <View style={st.profileStatRow}>
+                  <View style={[st.profileStatRow, { backgroundColor: C.surface2, borderColor: C.divider }]}>
                     <View style={st.profileStat}>
-                      <Ionicons name="briefcase-outline" size={20} color="#0284c7" />
-                      <Text style={st.profileStatValue}>{applicantProfile?.jobs_completed ?? 0}</Text>
-                      <Text style={st.profileStatLabel}>Jobs Done</Text>
+                      <Ionicons name="briefcase-outline" size={20} color={C.blue600} />
+                      <Text style={[st.profileStatValue, { color: C.text1 }]}>{applicantProfile?.jobs_completed ?? 0}</Text>
+                      <Text style={[st.profileStatLabel, { color: C.text3 }]}>Jobs Done</Text>
                     </View>
-                    <View style={[st.profileStat, { borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#e2e8f0' }]}>
+                    <View style={[st.profileStat, { borderLeftWidth: 1, borderRightWidth: 1, borderColor: C.divider }]}>
                       <Ionicons name="star-outline" size={20} color="#fbbf24" />
-                      <Text style={st.profileStatValue}>
+                      <Text style={[st.profileStatValue, { color: C.text1 }]}>
                         {applicantProfile?.rating !== null && applicantProfile?.rating !== undefined
                           ? applicantProfile.rating.toFixed(1) : '—'}
                       </Text>
-                      <Text style={st.profileStatLabel}>Rating</Text>
+                      <Text style={[st.profileStatLabel, { color: C.text3 }]}>Rating</Text>
                     </View>
                     <View style={st.profileStat}>
-                      <Ionicons name="calendar-outline" size={20} color="#22c55e" />
-                      <Text style={st.profileStatValue}>
+                      <Ionicons name="calendar-outline" size={20} color={C.success} />
+                      <Text style={[st.profileStatValue, { color: C.text1 }]}>
                         {applicantProfile?.created_at
                           ? new Date(applicantProfile.created_at).getFullYear().toString()
                           : '—'}
                       </Text>
-                      <Text style={st.profileStatLabel}>Member Since</Text>
+                      <Text style={[st.profileStatLabel, { color: C.text3 }]}>Member Since</Text>
                     </View>
                   </View>
 
                   {applicantProfile?.phone && (
-                    <View style={[st.profileInfoRow, { backgroundColor: '#f8fafc' }]}>
-                      <Ionicons name="call-outline" size={16} color="#64748b" />
-                      <Text style={st.profileInfoText}>{applicantProfile.phone}</Text>
+                    <View style={[st.profileInfoRow, { backgroundColor: C.surface2 }]}>
+                      <Ionicons name="call-outline" size={16} color={C.text3} />
+                      <Text style={[st.profileInfoText, { color: C.text2 }]}>{applicantProfile.phone}</Text>
                     </View>
                   )}
 
-                  <View style={[st.profileInfoRow, { backgroundColor: '#f0fdf4' }]}>
-                    <Ionicons name="shield-checkmark-outline" size={16} color="#22c55e" />
-                    <Text style={[st.profileInfoText, { color: '#15803d' }]}>Verified Cleaner on CleanOps</Text>
+                  <View style={[st.profileInfoRow, { backgroundColor: isDark ? C.success + '15' : '#f0fdf4' }]}>
+                    <Ionicons name="shield-checkmark-outline" size={16} color={C.success} />
+                    <Text style={[st.profileInfoText, { color: isDark ? C.success : '#15803d' }]}>Verified Cleaner on CleanOps</Text>
                   </View>
                 </>
               )}
 
-              <TouchableOpacity style={st.profileCloseBtn} onPress={() => setShowProfileModal(false)}>
-                <Text style={st.profileCloseBtnText}>Close</Text>
+              <TouchableOpacity style={[st.profileCloseBtn, { backgroundColor: C.surface2 }]} onPress={() => setShowProfileModal(false)}>
+                <Text style={[st.profileCloseBtnText, { color: C.text2 }]}>Close</Text>
               </TouchableOpacity>
             </View>
           </View>

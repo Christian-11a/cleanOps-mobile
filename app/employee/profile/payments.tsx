@@ -47,7 +47,7 @@ export default function EmployeePayoutMethodsScreen() {
       const methods = await getPaymentMethods();
       setPaymentMethods(methods);
     } catch (e) {
-      console.warn(e);
+      if (__DEV__) console.warn(e);
     } finally {
       setLoading(false);
     }
