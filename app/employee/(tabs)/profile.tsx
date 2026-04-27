@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   Alert, ActivityIndicator, ScrollView, Modal, KeyboardAvoidingView, Platform,
@@ -26,6 +27,8 @@ export default function EmployeeProfileScreen() {
     return profile?.full_name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'E';
   }, [profile]);
 
+  useFocusEffect(useCallback(() => { refreshProfile(); }, [refreshProfile]));
+
   const stats = {
     jobsDone: profile?.total_jobs || 0,
     rating: profile?.rating || 0,
@@ -34,6 +37,7 @@ export default function EmployeeProfileScreen() {
 
   const MENU_ITEMS = [
     { id: 'edit',      label: 'Edit Profile',    sub: 'Update info & photo',   icon: 'person-outline',    route: '/employee/profile/edit' },
+    { id: 'reviews',   label: 'Reviews & Feedback', sub: 'Ratings you received',  icon: 'star-outline',      route: '/employee/profile/reviews' },
     { id: 'area',      label: 'Service Area',    sub: 'Update GPS radius',      icon: 'map-outline',       route: '/employee/profile/area' },
     { id: 'payout',    label: 'Payout Settings', sub: 'Bank & payout info',     icon: 'card-outline',      route: '/employee/profile/payments' },
     { id: 'security',  label: 'Privacy & Security', sub: 'Password and data',    icon: 'lock-closed-outline', route: '/employee/profile/security' },
@@ -71,19 +75,13 @@ export default function EmployeeProfileScreen() {
                   <Text style={[st.roleText, { color: C.text3 }]}>Cleaner</Text>
                </View>
             </View>
-            <TouchableOpacity 
-              style={[st.editBtn, { backgroundColor: C.surface2 }]}
-              onPress={() => router.push('/employee/profile/settings')}
-            >
-               <Ionicons name="settings-outline" size={20} color={C.text2} />
-            </TouchableOpacity>
           </View>
 
           {/* Stats Bar */}
           <View style={[st.statsBar, { backgroundColor: C.surface, borderColor: C.divider }]}>
              <View style={st.statItem}>
                 <Text style={[st.statVal, { color: C.text1 }]}>{stats.jobsDone}</Text>
-                <Text style={[st.statLabel, { color: C.text3 }]}>Jobs Done</Text>
+                <Text style={[st.statLabel, { color: C.text3 }]}>Jobs Completed</Text>
              </View>
              <View style={[st.statDivider, { backgroundColor: C.divider }]} />
              <View style={st.statItem}>

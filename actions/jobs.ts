@@ -21,6 +21,7 @@ export async function createJob(jobData: {
   price: number;
   size: string;
   customInstructions?: string;
+  title?: string;
 }): Promise<Job> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Unauthorized');
@@ -55,6 +56,7 @@ export async function createJob(jobData: {
       price_amount: jobData.price,
       status: 'OPEN',
       tasks: tasksWithMeta,
+      title: jobData.title || null,
     }])
     .select()
     .single();
@@ -313,16 +315,11 @@ export async function approveApplication(jobId: string, employeeId: string): Pro
   if (error) throw error;
 }
 
-export async function rejectApplication(jobId: string): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Unauthorized');
-
+export async function rejectApplication(applicantId: string): Promise<void> {
   const { error } = await (supabase as any)
-    .from('jobs')
-    .update({ worker_id: null, worker_name: null, worker_phone: null })
-    .eq('id', jobId)
-    .eq('customer_id', user.id)
-    .eq('status', 'OPEN');
+    .from('job_applications')
+    .delete()
+    .eq('id', applicantId);
 
   if (error) throw error;
 }
@@ -348,6 +345,8 @@ export async function cancelJob(jobId: string): Promise<void> {
   const { error: refundErr } = await (supabase as any).rpc('add_money', {
     user_id: user.id,
     amount: refundAmount,
+    p_type: 'REFUND',
+    p_description: 'Job Refunded'
   });
 
   if (refundErr) throw new Error('Failed to process refund. Please contact support.');
@@ -361,17 +360,20 @@ export async function updateJobStatus(
   status: JobStatus,
   proofOfWork?: string[],
   proofDescription?: string,
+  tasksCompletedCount?: number,
 ): Promise<void> {
   const updateData: Record<string, any> = { status };
 
-  // Database column is proof_of_work (JSONB).
-  // If we have a description but no separate column, we store it as an object entry in the array.
   if (proofOfWork) {
     const proofData: any[] = [...proofOfWork];
     if (proofDescription) {
       proofData.push({ type: 'comment', content: proofDescription });
     }
     updateData.proof_of_work = proofData;
+  }
+
+  if (tasksCompletedCount !== undefined) {
+    updateData.tasks_completed_count = tasksCompletedCount;
   }
 
   const { error } = await (supabase as any)
@@ -417,31 +419,45 @@ export async function getNearbyJobs(radiusKm = 50): Promise<Job[]> {
   return (data ?? []).map(normalizeJob);
 }
 
-// Normalize job from DB to our Job type
-// Handles JSONB tasks (can be string[] or object[]) and worker_id -> employee_id mapping
+// Normalize job from DB to our Job type.
+// Explicit mapping — no ...raw spread so no untyped DB fields leak into the app.
+// DB uses worker_id/worker_name/worker_phone; frontend Job type uses employee_id/name/phone.
 function normalizeJob(raw: any): Job {
   const rawTasks = Array.isArray(raw.tasks) ? raw.tasks : [];
-  const sizeObj = rawTasks.find((t: any) => t && typeof t === 'object' && t.type === 'size');
+  const sizeObj  = rawTasks.find((t: any) => t && typeof t === 'object' && t.type === 'size');
   const instrObj = rawTasks.find((t: any) => t && typeof t === 'object' && t.type === 'instruction');
 
   const proof_of_work = Array.isArray(raw.proof_of_work) ? raw.proof_of_work : [];
-  const commentObj = proof_of_work.find((p: any) => p && typeof p === 'object' && p.type === 'comment');
-  const proof_urls = proof_of_work
+  const commentObj    = proof_of_work.find((p: any) => p && typeof p === 'object' && p.type === 'comment');
+  const proof_urls    = proof_of_work
     .filter((p: any) => p && (typeof p === 'string' || (typeof p === 'object' && p.type !== 'comment')))
     .map((p: any) => (typeof p === 'string' ? p : p.url ?? String(p)));
 
   return {
-    ...raw,
-    tasks: parseTasks(rawTasks),
-    size: sizeObj?.value || raw.size,
-    custom_instructions: instrObj?.value || raw.custom_instructions,
-    proof_urls,
-    proof_description: commentObj?.content || raw.proof_description,
-    employee_id: raw.worker_id, // map worker_id to employee_id for our type
-    employee_name: raw.worker_name, // map worker_name to employee_name for our type
-    employee_phone: raw.worker_phone, // map worker_phone to employee_phone for our type
-    customer_phone: raw.customer_phone,
-  } as Job;
+    id:                    raw.id,
+    customer_id:           raw.customer_id,
+    employee_id:           raw.worker_id ?? undefined,
+    status:                raw.status,
+    urgency:               raw.urgency,
+    size:                  sizeObj?.value || raw.size,
+    tasks:                 parseTasks(rawTasks),
+    tasks_completed_count: raw.tasks_completed_count ?? 0,
+    location_address:      raw.location_address ?? '',
+    location_lat:          raw.location_lat ?? undefined,
+    location_lng:          raw.location_lng ?? undefined,
+    distance:              raw.distance ?? undefined,
+    price_amount:          raw.price_amount,
+    proof_urls:            proof_urls.length > 0 ? proof_urls : undefined,
+    proof_description:     commentObj?.content || raw.proof_description || undefined,
+    customer_name:         raw.customer_name ?? undefined,
+    customer_phone:        raw.customer_phone ?? undefined,
+    employee_name:         raw.worker_name ?? undefined,
+    employee_phone:        raw.worker_phone ?? undefined,
+    custom_instructions:   instrObj?.value || raw.custom_instructions || undefined,
+    title:                 raw.title ?? undefined,
+    created_at:            raw.created_at,
+    updated_at:            raw.updated_at ?? undefined,
+  };
 }
 
 export async function hasEmployeeAppliedToJob(jobId: string): Promise<boolean> {

@@ -1,18 +1,22 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView,
+  View, Text, StyleSheet, ScrollView, TextInput,
   TouchableOpacity, Alert, ActivityIndicator, Image, Modal, BackHandler, StatusBar, Platform, Dimensions
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { getJob, approveJobCompletion, cancelJob, approveApplication, rejectApplication, getJobApplicants } from '@/actions/jobs';
+import { getJob, approveJobCompletion, cancelJob, approveApplication, rejectApplication, getJobApplicants, uploadProofImage } from '@/actions/jobs';
+import { submitReview, getJobReview, getProfileReviews } from '@/actions/reviews';
+import { submitDispute, getJobDispute } from '@/actions/disputes';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/themeContext';
 import { useAuth } from '@/lib/authContext';
 import { useToast } from '@/lib/toastContext';
 import { ChatWindow } from '@/components/chat/ChatWindow';
+import * as ImagePicker from 'expo-image-picker';
 import type { Job } from '@/types';
 
 const { width } = Dimensions.get('window');
@@ -28,7 +32,7 @@ export default function CustomerJobDetailScreen() {
   const { id }    = useLocalSearchParams<{ id: string }>();
   const router    = useRouter();
   const { colors: C, isDark, statusColors: SC } = useTheme();
-  const { refreshProfile } = useAuth();
+  const { refreshProfile, user } = useAuth();
   const insets = useSafeAreaInsets();
   const toast = useToast();
   const [job,            setJob]           = useState<Job | null>(null);
@@ -44,7 +48,38 @@ export default function CustomerJobDetailScreen() {
     full_name: string; rating: number | null; phone: string | null;
     created_at: string; jobs_completed: number;
   } | null>(null);
+  const [applicantReviews, setApplicantReviews] = useState<any[]>([]);
   const [loadingProfile, setLoadingProfile] = useState(false);
+
+  // Ratings & Disputes State
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratingVal, setRatingVal] = useState(0);
+  const [ratingComment, setRatingComment] = useState('');
+  const [submittingRating, setSubmittingRating] = useState(false);
+  const [hasReviewed, setHasReviewed] = useState(false);
+
+  const [showDisputeModal, setShowDisputeModal] = useState(false);
+  const [disputeReason, setDisputeReason] = useState('Poor Service Quality');
+  const [disputeDesc, setDisputeDesc] = useState('');
+  const [disputeImages, setDisputeImages] = useState<string[]>([]);
+  const [submittingDispute, setSubmittingDispute] = useState(false);
+  const [hasDisputed, setHasDisputed] = useState(false);
+
+  async function handlePickDisputeMedia() {
+    const res = await ImagePicker.launchImageLibraryAsync({
+      quality: 0.7,
+      allowsMultipleSelection: true,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    });
+    if (!res.canceled) setDisputeImages(prev => [...prev, ...res.assets.map(a => a.uri)]);
+  }
+
+  async function handleTakeDisputePhoto() {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') return Alert.alert('Error', 'Camera access required');
+    const res = await ImagePicker.launchCameraAsync({ quality: 0.7 });
+    if (!res.canceled) setDisputeImages(prev => [...prev, ...res.assets.map(a => a.uri)]);
+  }
 
   async function fetchJob() {
     try {
@@ -54,6 +89,14 @@ export default function CustomerJobDetailScreen() {
       ]);
       setJob(jobData);
       setApplicants(applicantsData || []);
+      if (jobData?.status === 'COMPLETED') {
+        const [review, dispute] = await Promise.all([
+          getJobReview(id),
+          getJobDispute(id),
+        ]);
+        setHasReviewed(!!review);
+        setHasDisputed(!!dispute);
+      }
     } catch (err) {
       if (__DEV__) console.warn(err);
     } finally {
@@ -70,9 +113,11 @@ export default function CustomerJobDetailScreen() {
     };
     const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => sub.remove();
-  }, [showChat]);
+  }, [showChat, router]);
 
-  useEffect(() => { fetchJob(); }, [id]);
+  useFocusEffect(useCallback(() => {
+    fetchJob();
+  }, [id]));
 
   async function handleApproveCleaner(applicant: any) {
     const workerId = applicant.employee_id;
@@ -132,12 +177,11 @@ export default function CustomerJobDetailScreen() {
   async function handleReject(applicant: any) {
     const workerName = applicant.profiles?.full_name || 'this applicant';
     Alert.alert('Reject Applicant?', `Are you sure you want to reject ${workerName}?`, [
-      { text: 'Keep', style: 'cancel' },
-      { text: 'Reject', style: 'destructive', onPress: async () => {
+      { text: 'No', style: 'cancel' },
+      { text: 'Yes', style: 'destructive', onPress: async () => {
         setRejecting(true);
         try {
-          // Reject is handled by deleting the application record or updating status
-          await (supabase as any).from('job_applications').delete().eq('id', applicant.id);
+          await rejectApplication(applicant.id);
           await fetchJob();
           toast.show('Applicant removed.');
         } catch (err: any) { Alert.alert('Error', err.message); }
@@ -155,21 +199,85 @@ export default function CustomerJobDetailScreen() {
     setLoadingProfile(true);
     
     try {
-      const [{ data: prof }, { count }] = await Promise.all([
-        (supabase as any).from('profiles').select('full_name, rating, phone, created_at').eq('id', workerId).single(),
-        (supabase as any).from('jobs').select('*', { count: 'exact', head: true }).eq('worker_id', workerId).eq('status', 'COMPLETED'),
+      const [{ data: prof }, reviews] = await Promise.all([
+        (supabase as any).from('profiles').select('full_name, rating, phone, created_at, total_jobs').eq('id', workerId).single(),
+        getProfileReviews(workerId)
       ]);
       setApplicantProfile({
         full_name: prof?.full_name || 'Unknown',
         rating: prof?.rating ? Number(prof.rating) : null,
         phone: prof?.phone || null,
         created_at: prof?.created_at || '',
-        jobs_completed: count ?? 0,
+        jobs_completed: prof?.total_jobs ?? 0,
       });
+      setApplicantReviews(reviews);
     } catch (e) {
       if (__DEV__) console.warn(e);
     } finally {
       setLoadingProfile(false);
+    }
+  }
+
+  async function handleRatingSubmit() {
+    if (!job?.employee_id) return;
+    if (ratingVal === 0) {
+      Alert.alert('Select a Rating', 'Please tap a star to rate your cleaner before submitting.');
+      return;
+    }
+    setSubmittingRating(true);
+    try {
+      await submitReview(id, job.employee_id, ratingVal, ratingComment.trim() || undefined);
+      setHasReviewed(true);
+      await refreshProfile();
+      toast.show('Thank you for your feedback!');
+      setShowRatingModal(false);
+      setRatingVal(0);
+      setRatingComment('');
+    } catch (e: any) {
+      const msg = e?.message || '';
+      if (msg.includes('unique') || msg.includes('duplicate')) {
+        Alert.alert('Already Rated', 'You have already submitted a rating for this job.');
+        setHasReviewed(true);
+        setShowRatingModal(false);
+      } else {
+        Alert.alert('Error', msg || 'Failed to submit rating.');
+      }
+    } finally {
+      setSubmittingRating(false);
+    }
+  }
+
+  async function handleDisputeSubmit() {
+    if (!job?.employee_id || !user) return;
+    const desc = disputeDesc.trim();
+    if (!desc || desc.length < 10) {
+      Alert.alert('Details Required', 'Please describe the issue in at least 10 characters before submitting.');
+      return;
+    }
+    setSubmittingDispute(true);
+    try {
+      let urls: string[] = [];
+      if (disputeImages.length > 0) {
+        urls = await Promise.all(disputeImages.map(uri => uploadProofImage(uri, user.id)));
+      }
+      await submitDispute(id, job.employee_id, disputeReason, desc, urls);
+      setHasDisputed(true);
+      toast.show('Issue reported. Our team will review it.');
+      setShowDisputeModal(false);
+      setDisputeImages([]);
+      setDisputeDesc('');
+      setDisputeReason('Poor Service Quality');
+    } catch (e: any) {
+      const msg = e?.message || '';
+      if (msg.includes('unique') || msg.includes('duplicate')) {
+        Alert.alert('Already Reported', 'You have already filed a report for this job.');
+        setHasDisputed(true);
+        setShowDisputeModal(false);
+      } else {
+        Alert.alert('Error', msg || 'Failed to submit report.');
+      }
+    } finally {
+      setSubmittingDispute(false);
     }
   }
 
@@ -341,7 +449,7 @@ export default function CustomerJobDetailScreen() {
                         </View>
                       </TouchableOpacity>
 
-                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
                         <TouchableOpacity
                           style={[st.rejectBtn, { backgroundColor: isDark ? C.error + '15' : '#fff1f2', borderColor: isDark ? C.error + '40' : '#fca5a5' }, rejecting && st.disabled]}
                           onPress={() => handleReject(applicant)}
@@ -350,12 +458,12 @@ export default function CustomerJobDetailScreen() {
                           {rejecting ? <ActivityIndicator color={C.error} size="small" /> : <Text style={[st.rejectBtnText, { color: C.error }]}>Reject</Text>}
                         </TouchableOpacity>
                         <TouchableOpacity
-                          style={[st.approveCleanerBtn, { flex: 1 }, approving && st.disabled]}
+                          style={[st.approveCleanerBtn, approving && st.disabled]}
                           onPress={() => handleApproveCleaner(applicant)}
                           disabled={approving || rejecting}
                         >
                           <LinearGradient colors={['#0ea5e9', '#0284c7']} style={st.btnGradient}>
-                            {approving ? <ActivityIndicator color="#fff" /> : <Text style={st.approveCleanerText}>Approve & Hire</Text>}
+                            {approving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={st.approveCleanerText}>Approve & Hire</Text>}
                           </LinearGradient>
                         </TouchableOpacity>
                       </View>
@@ -372,25 +480,25 @@ export default function CustomerJobDetailScreen() {
           )}
 
           {/* Assigned Cleaner (when IN_PROGRESS or later) */}
-          {job.status !== 'OPEN' && job.employee_name && (
+          {job.status !== 'OPEN' && job.employee_id && (
             <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
               <Text style={[st.cardTitle, { color: C.text1 }]}>Your Cleaner</Text>
               <View style={[st.applicantCard, { backgroundColor: C.surface2, borderColor: C.divider }]}>
-                 <TouchableOpacity 
-                    style={st.applicantInfo} 
-                    onPress={() => handleViewProfile({ employee_id: job.employee_id })} 
+                 <TouchableOpacity
+                    style={st.applicantInfo}
+                    onPress={() => handleViewProfile({ employee_id: job.employee_id })}
                     activeOpacity={0.75}
                   >
                     <View style={[st.avatarPlaceholder, { backgroundColor: isDark ? C.bg : '#f1f5f9' }]}>
                       <Ionicons name="person" size={20} color={C.text3} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[st.applicantName, { color: C.text1 }]}>{job.employee_name}</Text>
+                      <Text style={[st.applicantName, { color: C.text1 }]}>{job.employee_name || 'Assigned Cleaner'}</Text>
                       <Text style={[st.ratingText, { color: C.text3 }]}>Assigned Cleaner</Text>
                     </View>
-                    <TouchableOpacity style={[st.viewProfilePill, { backgroundColor: isDark ? C.blue800 + '40' : '#e0f2fe' }]} onPress={() => handleViewProfile({ employee_id: job.employee_id })}>
+                    <View style={[st.viewProfilePill, { backgroundColor: isDark ? C.blue800 + '40' : '#e0f2fe' }]}>
                       <Text style={[st.viewProfileText, { color: isDark ? C.blue400 : '#0284c7' }]}>View Profile</Text>
-                    </TouchableOpacity>
+                    </View>
                  </TouchableOpacity>
               </View>
             </View>
@@ -413,6 +521,32 @@ export default function CustomerJobDetailScreen() {
                       <Text style={st.approveBtnText}>Approve Payment</Text>
                     </>
                 }
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Completed Actions */}
+          {job.status === 'COMPLETED' && (
+            <View style={st.completedActionsRow}>
+              <TouchableOpacity
+                style={[st.actionBtn, { backgroundColor: hasReviewed ? C.surface2 : C.surface, borderColor: hasReviewed ? C.divider : C.blue600 }]}
+                onPress={() => {
+                  if (hasReviewed) { Alert.alert('Already Rated', 'You have already submitted a rating for this job.'); return; }
+                  setRatingVal(0); setRatingComment(''); setShowRatingModal(true);
+                }}
+              >
+                 <Ionicons name={hasReviewed ? 'star' : 'star-outline'} size={18} color={hasReviewed ? '#fbbf24' : C.blue600} />
+                 <Text style={[st.actionBtnText, { color: hasReviewed ? C.text3 : C.blue600 }]}>{hasReviewed ? 'Rated' : 'Rate Cleaner'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[st.actionBtn, { backgroundColor: hasDisputed ? C.surface2 : C.surface, borderColor: hasDisputed ? C.divider : C.error }]}
+                onPress={() => {
+                  if (hasDisputed) { Alert.alert('Already Reported', 'You have already filed a report for this job.'); return; }
+                  setShowDisputeModal(true);
+                }}
+              >
+                 <Ionicons name="warning-outline" size={18} color={hasDisputed ? C.text3 : C.error} />
+                 <Text style={[st.actionBtnText, { color: hasDisputed ? C.text3 : C.error }]}>{hasDisputed ? 'Reported' : 'Report Issue'}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -458,7 +592,7 @@ export default function CustomerJobDetailScreen() {
                     <View style={st.profileStat}>
                       <Ionicons name="briefcase-outline" size={20} color={C.blue600} />
                       <Text style={[st.profileStatValue, { color: C.text1 }]}>{applicantProfile?.jobs_completed ?? 0}</Text>
-                      <Text style={[st.profileStatLabel, { color: C.text3 }]}>Jobs Done</Text>
+                      <Text style={[st.profileStatLabel, { color: C.text3 }]}>Jobs Completed</Text>
                     </View>
                     <View style={[st.profileStat, { borderLeftWidth: 1, borderRightWidth: 1, borderColor: C.divider }]}>
                       <Ionicons name="star-outline" size={20} color="#fbbf24" />
@@ -477,6 +611,41 @@ export default function CustomerJobDetailScreen() {
                       </Text>
                       <Text style={[st.profileStatLabel, { color: C.text3 }]}>Member Since</Text>
                     </View>
+                  </View>
+
+                  {/* Reviews Section */}
+                  <View style={{ marginTop: 8 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: C.text1 }}>Recent Reviews</Text>
+                      {applicantReviews.length > 3 && (
+                        <TouchableOpacity onPress={() => {
+                          setShowProfileModal(false);
+                          router.push('/customer/profile/reviews');
+                        }}>
+                          <Text style={{ fontSize: 12, color: C.blue600, fontWeight: '600' }}>See All</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    {applicantReviews.length > 0 ? (
+                      applicantReviews.slice(0, 3).map((rev) => (
+                        <View key={rev.id} style={{ marginBottom: 16, borderBottomWidth: 1, borderBottomColor: C.divider, paddingBottom: 12 }}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: C.text1 }}>{rev.reviewer?.full_name || 'Customer'}</Text>
+                            <View style={{ flexDirection: 'row', gap: 2 }}>
+                              {[1,2,3,4,5].map(s => (
+                                <Ionicons key={s} name="star" size={10} color={rev.rating >= s ? '#fbbf24' : C.divider} />
+                              ))}
+                            </View>
+                          </View>
+                          {rev.comment && <Text style={{ fontSize: 13, color: C.text2, fontStyle: 'italic' }}>"{rev.comment}"</Text>}
+                          <Text style={{ fontSize: 10, color: C.text3, marginTop: 4 }}>
+                            {new Date(rev.created_at).toLocaleDateString()}
+                          </Text>
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={{ fontSize: 13, color: C.text3, fontStyle: 'italic', textAlign: 'center', paddingVertical: 12 }}>No reviews yet</Text>
+                    )}
                   </View>
 
                   {applicantProfile?.phone && (
@@ -511,6 +680,88 @@ export default function CustomerJobDetailScreen() {
             <Image source={{ uri: selectedImage }} style={st.fullImage} resizeMode="contain" />
           )}
         </View>
+      </Modal>
+
+      {/* Rating Modal */}
+      <Modal visible={showRatingModal} transparent animationType="slide" onRequestClose={() => { setShowRatingModal(false); setRatingVal(0); setRatingComment(''); }}>
+        <TouchableOpacity style={st.modalOverlay} activeOpacity={1} onPress={() => { setShowRatingModal(false); setRatingVal(0); setRatingComment(''); }}>
+          <View style={[st.profileSheet, { backgroundColor: C.surface, maxHeight: '80%' }]} onStartShouldSetResponder={() => true}>
+            <ScrollView contentContainerStyle={{ padding: 20 }} showsVerticalScrollIndicator={false}>
+              <Text style={{ fontSize: 20, fontWeight: '700', color: C.text1, marginBottom: 12 }}>Rate Your Cleaner</Text>
+              <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'center', marginBottom: 20 }}>
+                {[1,2,3,4,5].map(star => (
+                  <TouchableOpacity key={star} onPress={() => setRatingVal(star)}>
+                    <Ionicons name={ratingVal >= star ? 'star' : 'star-outline'} size={32} color="#fbbf24" />
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TextInput
+                style={[st.commentInput, { backgroundColor: C.surface2, borderColor: C.divider, color: C.text1 }]}
+                placeholder="Leave a comment (optional)..."
+                placeholderTextColor={C.text3}
+                value={ratingComment}
+                onChangeText={setRatingComment}
+                multiline
+              />
+              <TouchableOpacity style={[st.approveCleanerBtn, { height: 50, marginTop: 12, backgroundColor: C.blue600, width: '100%', alignItems: 'center', justifyContent: 'center' }, submittingRating && st.disabled]} onPress={handleRatingSubmit} disabled={submittingRating}>
+                 {submittingRating ? <ActivityIndicator color="#fff" /> : <Text style={st.approveCleanerText}>Submit Rating</Text>}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Dispute Modal */}
+      <Modal visible={showDisputeModal} transparent animationType="slide" onRequestClose={() => { setShowDisputeModal(false); setDisputeDesc(''); setDisputeImages([]); }}>
+        <TouchableOpacity style={st.modalOverlay} activeOpacity={1} onPress={() => { setShowDisputeModal(false); setDisputeDesc(''); setDisputeImages([]); }}>
+          <View style={[st.profileSheet, { backgroundColor: C.surface, maxHeight: '85%' }]} onStartShouldSetResponder={() => true}>
+            <ScrollView contentContainerStyle={{ padding: 20 }} showsVerticalScrollIndicator={false}>
+              <Text style={{ fontSize: 20, fontWeight: '700', color: C.text1, marginBottom: 12 }}>Report an Issue</Text>
+              <Text style={{ fontSize: 13, color: C.text2, marginBottom: 16 }}>Our team will review your report and take appropriate action.</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: C.text3, marginBottom: 8 }}>REASON</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                {['Poor Service Quality', 'Unprofessional Behavior', 'Damaged Property', 'Other'].map(r => (
+                  <TouchableOpacity key={r} onPress={() => setDisputeReason(r)} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: disputeReason === r ? C.blue600 : C.divider, backgroundColor: disputeReason === r ? C.blue600 + '15' : C.surface2 }}>
+                    <Text style={{ fontSize: 13, color: disputeReason === r ? C.blue600 : C.text2 }}>{r}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: C.text3, marginBottom: 8 }}>DETAILS</Text>
+              <TextInput
+                style={[st.commentInput, { backgroundColor: C.surface2, borderColor: C.divider, color: C.text1 }]}
+                placeholder="Please describe the issue..."
+                placeholderTextColor={C.text3}
+                value={disputeDesc}
+                onChangeText={setDisputeDesc}
+                multiline
+              />
+
+              <Text style={{ fontSize: 12, fontWeight: '600', color: C.text3, marginBottom: 8 }}>OPTIONAL EVIDENCE</Text>
+              <View style={st.evidenceRow}>
+                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                    {disputeImages.map((uri, idx) => (
+                      <View key={idx} style={st.evidenceThumb}>
+                         <Image source={{ uri }} style={{ flex: 1, borderRadius: 10 }} />
+                         <TouchableOpacity style={st.removeThumb} onPress={() => setDisputeImages(prev => prev.filter((_, i) => i !== idx))}>
+                            <Ionicons name="close-circle" size={18} color={C.error} />
+                         </TouchableOpacity>
+                      </View>
+                    ))}
+                    <TouchableOpacity style={[st.uploadBtnSmall, { backgroundColor: C.surface2, borderColor: C.divider }]} onPress={handleTakeDisputePhoto}>
+                       <Ionicons name="camera" size={20} color={C.blue600} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[st.uploadBtnSmall, { backgroundColor: C.surface2, borderColor: C.divider }]} onPress={handlePickDisputeMedia}>
+                       <Ionicons name="image" size={20} color={C.blue600} />
+                    </TouchableOpacity>
+                 </ScrollView>
+              </View>
+
+              <TouchableOpacity style={[st.approveCleanerBtn, { height: 50, marginTop: 12, backgroundColor: C.error, width: '100%', alignItems: 'center', justifyContent: 'center' }, submittingDispute && st.disabled]} onPress={handleDisputeSubmit} disabled={submittingDispute}>
+                 {submittingDispute ? <ActivityIndicator color="#fff" /> : <Text style={st.approveCleanerText}>Submit Report</Text>}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
@@ -664,6 +915,7 @@ const st = StyleSheet.create({
   },
   rejectBtnText: { fontSize: 13, fontWeight: '700', color: '#ef4444' },
   approveCleanerBtn: {
+    flex: 1,
     height: 44,
     borderRadius: 12,
     overflow: 'hidden',
@@ -672,6 +924,7 @@ const st = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 12,
   },
   approveCleanerText: {
     color: '#fff',
@@ -714,4 +967,12 @@ const st = StyleSheet.create({
   profileInfoText: { fontSize: 13, fontWeight: '600', color: '#334155' },
   profileCloseBtn: { backgroundColor: '#f1f5f9', borderRadius: 16, paddingVertical: 14, alignItems: 'center', marginTop: 8 },
   profileCloseBtnText: { fontSize: 14, fontWeight: '700', color: '#64748b' },
+  completedActionsRow: { flexDirection: 'row', gap: 12, marginTop: 4 },
+  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 48, borderRadius: 16, borderWidth: 1 },
+  actionBtnText: { fontSize: 14, fontWeight: '600' },
+  commentInput: { height: 100, borderRadius: 16, borderWidth: 1, padding: 12, textAlignVertical: 'top', marginBottom: 12 },
+  evidenceRow: { height: 60, marginBottom: 20 },
+  evidenceThumb: { width: 56, height: 56, borderRadius: 12, overflow: 'hidden' },
+  removeThumb: { position: 'absolute', top: -4, right: -4, backgroundColor: '#fff', borderRadius: 10 },
+  uploadBtnSmall: { width: 56, height: 56, borderRadius: 12, borderWidth: 1.5, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
 });

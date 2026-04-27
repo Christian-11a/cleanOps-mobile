@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   RefreshControl, ActivityIndicator, Alert, TextInput, StatusBar
@@ -20,7 +21,7 @@ const FILTERS: { value: FilterVal; label: string }[] = [
   { value: 'APPLIED',        label: 'Applied' },
   { value: 'IN_PROGRESS',    label: 'In Progress' },
   { value: 'PENDING_REVIEW', label: 'Review' },
-  { value: 'COMPLETED',      label: 'Done' },
+  { value: 'COMPLETED',      label: 'Completed' },
   { value: 'CANCELLED',      label: 'Cancelled' },
 ];
 
@@ -46,6 +47,7 @@ export default function EmployeeJobsTab() {
   }, []);
 
   useEffect(() => { fetchJobs(); }, [fetchJobs]);
+  useFocusEffect(useCallback(() => { fetchJobs(); }, [fetchJobs]));
 
   const counts = useMemo(() => ({
     all:            jobs.length,

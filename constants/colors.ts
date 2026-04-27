@@ -45,15 +45,15 @@ export const Colors = LightColors;
 export const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
   OPEN:           { bg: '#EFF6FF', text: '#3B82F6', label: 'Open' },
   IN_PROGRESS:    { bg: '#FFFBEB', text: '#F59E0B', label: 'In Progress' },
-  PENDING_REVIEW: { bg: '#FDF2F8', text: '#EC4899', label: 'Pending Review' },
-  COMPLETED:      { bg: '#ECFDF5', text: '#10B981', label: 'Completed' },
+  PENDING_REVIEW: { bg: '#FDF2F8', text: '#EC4899', label: 'Awaiting Approval' },
+  COMPLETED:      { bg: '#ECFDF5', text: '#10B981', label: 'Payment Released' },
   CANCELLED:      { bg: '#FEF2F2', text: '#EF4444', label: 'Cancelled' },
 };
 
 export const DARK_STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
   OPEN:           { bg: '#1e3a5f', text: '#60a5fa', label: 'Open' },
   IN_PROGRESS:    { bg: '#3b2a0a', text: '#fbbf24', label: 'In Progress' },
-  PENDING_REVIEW: { bg: '#3b0e40', text: '#f472b6', label: 'Pending Review' },
-  COMPLETED:      { bg: '#0f2f20', text: '#34d399', label: 'Completed' },
+  PENDING_REVIEW: { bg: '#3b0e40', text: '#f472b6', label: 'Awaiting Approval' },
+  COMPLETED:      { bg: '#0f2f20', text: '#34d399', label: 'Payment Released' },
   CANCELLED:      { bg: '#3b0f0f', text: '#f87171', label: 'Cancelled' },
 };

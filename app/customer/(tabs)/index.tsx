@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Dimensions, StatusBar, Platform, BackHandler } from 'react-native';
 import { useRouter, useSegments } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -6,11 +7,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/lib/authContext';
 import { getCustomerJobs } from '@/actions/jobs';
-import { getProfile } from '@/actions/auth';
 import { useTheme } from '@/lib/themeContext';
 import { useNotifications } from '@/lib/notificationContext';
 import { JobCard } from '@/components/shared/JobCard';
 import { RecentActivityFeed } from '@/components/dashboard/RecentActivityFeed';
+import { JobCardSkeleton } from '@/components/shared/SkeletonLoader';
 import type { Profile, Job } from '@/types';
 
 const { width } = Dimensions.get('window');
@@ -50,25 +51,24 @@ export default function CustomerHomeTab() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [prof, jobList] = await Promise.all([
-        getProfile(),
-        getCustomerJobs()
-      ]);
-      // Fall back to authProfile so the greeting always shows the real name
-      setProfile(prof ?? authProfile);
+      const jobList = await getCustomerJobs();
       setJobs(jobList || []);
     } catch (error) {
       if (__DEV__) console.error('Fetch error:', error);
-      setProfile(authProfile);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
+  }, []);
+
+  // Profile comes from authContext — no extra DB call needed
+  useEffect(() => {
+    setProfile(authProfile);
   }, [authProfile]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     fetchData();
-  }, [fetchData]);
+  }, [fetchData]));
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -166,7 +166,9 @@ export default function CustomerHomeTab() {
           </View>
 
           <View style={st.jobList}>
-            {recentJobs.length > 0 ? (
+            {loading ? (
+              [1, 2].map(i => <JobCardSkeleton key={i} />)
+            ) : recentJobs.length > 0 ? (
               recentJobs.map((job) => (
                 <JobCard key={job.id} job={job} onPress={() => router.push(`/customer/jobs/${job.id}`)} />
               ))

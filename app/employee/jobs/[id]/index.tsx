@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, ActivityIndicator, Image, Dimensions, Platform,
@@ -9,6 +10,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getJob, applyForJob, updateJobStatus, uploadProofImage, hasEmployeeAppliedToJob } from '@/actions/jobs';
+import { submitDispute } from '@/actions/disputes';
 import { useTheme } from '@/lib/themeContext';
 import { useToast } from '@/lib/toastContext';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -43,6 +45,29 @@ export default function EmployeeJobDetailScreen() {
   // Submission State
   const [proofDesc, setProofDesc] = useState('');
   const [images,    setImages]    = useState<string[]>([]);
+
+  // Dispute State
+  const [showDisputeModal, setShowDisputeModal] = useState(false);
+  const [disputeReason, setDisputeReason] = useState('Payment Issue');
+  const [disputeDesc, setDisputeDesc] = useState('');
+  const [disputeImages, setDisputeImages] = useState<string[]>([]);
+  const [submittingDispute, setSubmittingDispute] = useState(false);
+
+  async function handlePickDisputeMedia() {
+    const res = await ImagePicker.launchImageLibraryAsync({
+      quality: 0.7,
+      allowsMultipleSelection: true,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    });
+    if (!res.canceled) setDisputeImages(prev => [...prev, ...res.assets.map(a => a.uri)]);
+  }
+
+  async function handleTakeDisputePhoto() {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') return Alert.alert('Error', 'Camera access required');
+    const res = await ImagePicker.launchCameraAsync({ quality: 0.7 });
+    if (!res.canceled) setDisputeImages(prev => [...prev, ...res.assets.map(a => a.uri)]);
+  }
 
   // Permissions
   const [cameraStatus,  requestCameraPermission]  = ImagePicker.useCameraPermissions();
@@ -202,15 +227,35 @@ export default function EmployeeJobDetailScreen() {
   async function handleFinalSubmit() {
     if (!job || !user) return;
     if (images.length === 0) return Alert.alert('Proof Required', 'Please add at least one photo of the finished work.');
-    
+
     setSubmitting(true);
     try {
       const urls = await Promise.all(images.map(uri => uploadProofImage(uri, user.id)));
-      await updateJobStatus(job.id, 'PENDING_REVIEW', urls, proofDesc);
+      await updateJobStatus(job.id, 'PENDING_REVIEW', urls, proofDesc, completedTasks.size);
       toast.show('Job submitted! Waiting for customer approval.');
       router.back();
     } catch (e: any) { Alert.alert('Error', e.message); }
     finally { setSubmitting(false); }
+  }
+
+  async function handleDisputeSubmit() {
+    if (!job?.customer_id || !user) return;
+    setSubmittingDispute(true);
+    try {
+      let urls: string[] = [];
+      if (disputeImages.length > 0) {
+        urls = await Promise.all(disputeImages.map(uri => uploadProofImage(uri, user.id)));
+      }
+      await submitDispute(id, job.customer_id, disputeReason, disputeDesc, urls);
+      toast.show('Issue reported. Our team will review it.');
+      setShowDisputeModal(false);
+      setDisputeImages([]);
+      setDisputeDesc('');
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setSubmittingDispute(false);
+    }
   }
 
   if (loading || !job || !theme) return (
@@ -278,8 +323,9 @@ export default function EmployeeJobDetailScreen() {
 
           <View style={st.headerContent}>
              <Text style={st.jobEmoji}>{theme.emoji}</Text>
-             <Text style={st.jobTitle}>{job.size || 'Home'} Cleaning</Text>
+             <Text style={st.jobTitle}>{job.title || `${job.size || 'Home'} Cleaning`}</Text>
              <View style={st.priceRow}>
+
                 <Text style={st.priceLabel}>Total Pay</Text>
                 <Text style={st.priceValue}>${job.price_amount.toFixed(0)}</Text>
              </View>
@@ -337,29 +383,28 @@ export default function EmployeeJobDetailScreen() {
              </View>
            )}
 
-           {/* Location Card */}
+           {/* Compact Location Card */}
            <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
               <View style={st.cardHeader}><Ionicons name="location" size={18} color={theme.primary} /><Text style={[st.cardTitle, { color: C.text1 }]}>Location</Text></View>
-              <Text style={[st.addressText, { color: C.text2 }]}>{job.location_address}</Text>
-              <View style={[st.mapPlaceholder, { backgroundColor: C.surface2, borderColor: C.divider }]}>
-                 <LinearGradient colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.1)']} style={st.mapOverlay}>
-                    <Ionicons name="navigate" size={32} color={theme.primary} />
-                    <Text style={[st.mapText, { color: C.text3 }]}>
-                      {userLoc && job.location_lat && job.location_lng 
-                        ? `${calculateDistance(userLoc.lat, userLoc.lng, job.location_lat, job.location_lng).toFixed(1)} km away`
-                        : (job.location_lat ? `${job.distance?.toFixed(1)} km away` : 'Location pinned')}
-                    </Text>
-                    
-                    {(job.location_lat || job.location_address) && (
-                      <TouchableOpacity 
-                        style={[st.navigateBtn, { backgroundColor: theme.primary }]}
-                        onPress={handleNavigate}
-                      >
-                         <Ionicons name="map" size={14} color="#fff" />
-                         <Text style={st.navigateBtnText}>Navigate to Job</Text>
-                      </TouchableOpacity>
-                    )}
-                 </LinearGradient>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+                <View style={{ flex: 1, paddingRight: 16 }}>
+                  <Text style={[st.addressText, { color: C.text2, marginBottom: 4 }]}>{job.location_address}</Text>
+                  <Text style={{ fontSize: 13, color: C.text3, fontWeight: '500' }}>
+                    <Ionicons name="navigate" size={12} color={C.text3} />{' '}
+                    {userLoc && job.location_lat && job.location_lng 
+                      ? `${calculateDistance(userLoc.lat, userLoc.lng, job.location_lat, job.location_lng).toFixed(1)} km away`
+                      : (job.location_lat ? `${job.distance?.toFixed(1)} km away` : 'Location pinned')}
+                  </Text>
+                </View>
+                {(job.location_lat || job.location_address) && (
+                  <TouchableOpacity 
+                    style={{ backgroundColor: theme.primary, height: 44, paddingHorizontal: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                    onPress={handleNavigate}
+                  >
+                     <Ionicons name="map" size={16} color="#fff" />
+                     <Text style={[st.navigateBtnText, { fontSize: 13, marginTop: 0 }]}>Navigate</Text>
+                  </TouchableOpacity>
+                )}
               </View>
            </View>
 
@@ -367,8 +412,18 @@ export default function EmployeeJobDetailScreen() {
            {isInProgress && completedTasks.size === job.tasks.length && (
              <View style={[st.card, { backgroundColor: C.surface, borderColor: C.blue600 }]}>
                 <Text style={[st.cardTitle, { color: C.text1, marginBottom: 8 }]}>Submit Completion</Text>
-                <Text style={[st.subText, { color: C.text3, marginBottom: 16 }]}>Upload proof of your work to finish the job.</Text>
+                <Text style={[st.subText, { color: C.text3, marginBottom: 16 }]}>Upload proof of your work and add a note to finish the job.</Text>
                 
+                <TextInput
+                  style={[st.proofInput, { backgroundColor: C.surface2, borderColor: C.divider, color: C.text1 }]}
+                  placeholder="Add a note about the completed work (optional)..."
+                  placeholderTextColor={C.text3}
+                  value={proofDesc}
+                  onChangeText={setProofDesc}
+                  multiline
+                  numberOfLines={3}
+                />
+
                 <View style={st.imageGrid}>
                    {images.map((uri, idx) => (
                      <View key={idx} style={st.imageWrap}>
@@ -389,8 +444,72 @@ export default function EmployeeJobDetailScreen() {
                 </View>
              </View>
            )}
+
+           {/* Report Customer Action (Only if Assigned or Done) */}
+           {(isInProgress || isPendingReview || isCompleted) && (
+             <TouchableOpacity 
+               style={[st.reportBtn, { borderColor: C.error + '40', backgroundColor: isDark ? C.error + '10' : '#fff1f2' }]} 
+               onPress={() => setShowDisputeModal(true)}
+             >
+                <Ionicons name="warning-outline" size={18} color={C.error} />
+                <Text style={[st.reportBtnText, { color: C.error }]}>Report Customer</Text>
+             </TouchableOpacity>
+           )}
         </View>
       </ScrollView>
+
+      {/* Dispute Modal */}
+      <Modal visible={showDisputeModal} transparent animationType="slide" onRequestClose={() => setShowDisputeModal(false)}>
+        <TouchableOpacity style={st.modalOverlay} activeOpacity={1} onPress={() => setShowDisputeModal(false)}>
+          <View style={[st.profileSheet, { backgroundColor: C.surface, maxHeight: '85%' }]} onStartShouldSetResponder={() => true}>
+            <ScrollView contentContainerStyle={{ padding: 20 }} showsVerticalScrollIndicator={false}>
+              <Text style={{ fontSize: 20, fontWeight: '700', color: C.text1, marginBottom: 12 }}>Report an Issue</Text>
+              <Text style={{ fontSize: 13, color: C.text2, marginBottom: 16 }}>Report concerns about this customer or job environment.</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: C.text3, marginBottom: 8 }}>REASON</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                {['Payment Issue', 'Unprofessional Behavior', 'Safety Concern', 'Inaccurate Description', 'Other'].map(r => (
+                  <TouchableOpacity key={r} onPress={() => setDisputeReason(r)} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: disputeReason === r ? C.blue600 : C.divider, backgroundColor: disputeReason === r ? C.blue600 + '15' : C.surface2 }}>
+                    <Text style={{ fontSize: 13, color: disputeReason === r ? C.blue600 : C.text2 }}>{r}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: C.text3, marginBottom: 8 }}>DETAILS</Text>
+              <TextInput
+                style={[st.commentInput, { backgroundColor: C.surface2, borderColor: C.divider, color: C.text1 }]}
+                placeholder="Please describe the issue in detail..."
+                placeholderTextColor={C.text3}
+                value={disputeDesc}
+                onChangeText={setDisputeDesc}
+                multiline
+              />
+
+              <Text style={{ fontSize: 12, fontWeight: '600', color: C.text3, marginBottom: 8 }}>OPTIONAL EVIDENCE</Text>
+              <View style={st.evidenceRow}>
+                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                    {disputeImages.map((uri, idx) => (
+                      <View key={idx} style={st.evidenceThumb}>
+                         <Image source={{ uri }} style={{ flex: 1, borderRadius: 10 }} />
+                         <TouchableOpacity style={st.removeThumb} onPress={() => setDisputeImages(prev => prev.filter((_, i) => i !== idx))}>
+                            <Ionicons name="close-circle" size={18} color={C.error} />
+                         </TouchableOpacity>
+                      </View>
+                    ))}
+                    <TouchableOpacity style={[st.uploadBtnSmall, { backgroundColor: C.surface2, borderColor: C.divider }]} onPress={handleTakeDisputePhoto}>
+                       <Ionicons name="camera" size={20} color={C.blue600} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[st.uploadBtnSmall, { backgroundColor: C.surface2, borderColor: C.divider }]} onPress={handlePickDisputeMedia}>
+                       <Ionicons name="image" size={20} color={C.blue600} />
+                    </TouchableOpacity>
+                 </ScrollView>
+              </View>
+
+              <TouchableOpacity style={[st.submitReportBtn, { backgroundColor: C.error, alignItems: 'center', justifyContent: 'center' }]} onPress={handleDisputeSubmit} disabled={submittingDispute || !disputeDesc}>
+                 {submittingDispute ? <ActivityIndicator color="#fff" /> : <Text style={st.submitReportBtnText}>Submit Report</Text>}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Action Footer */}
       <View style={[st.footer, { backgroundColor: C.surface, borderTopColor: C.divider, paddingBottom: Math.max(insets.bottom, 16) }]}>
@@ -501,6 +620,15 @@ const st = StyleSheet.create({
   navigateBtnText: { color: '#fff', fontSize: 13, fontWeight: '800' },
 
   subText: { fontSize: 13, lineHeight: 18 },
+  proofInput: { 
+    borderRadius: 12, 
+    borderWidth: 1, 
+    padding: 12, 
+    height: 80, 
+    textAlignVertical: 'top', 
+    fontSize: 13, 
+    marginBottom: 16 
+  },
   imageGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   imageWrap: { position: 'relative' },
   imagePreview: { width: 80, height: 80, borderRadius: 12 },
@@ -513,4 +641,24 @@ const st = StyleSheet.create({
   applyBtnText: { fontSize: 16, fontWeight: '800', color: '#fff' },
   appliedBtn: { height: 56, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#e2e8f0' },
   appliedText: { fontSize: 16, fontWeight: '700' },
+  reportBtn: {
+    marginTop: 20,
+    height: 50,
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  reportBtnText: { fontSize: 14, fontWeight: '700' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  profileSheet: { borderTopLeftRadius: 32, borderTopRightRadius: 32, overflow: 'hidden' },
+  commentInput: { height: 100, borderRadius: 16, borderWidth: 1, padding: 12, textAlignVertical: 'top', marginBottom: 20 },
+  submitReportBtn: { height: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 10 },
+  submitReportBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  evidenceRow: { height: 60, marginBottom: 20 },
+  evidenceThumb: { width: 56, height: 56, borderRadius: 12, overflow: 'hidden' },
+  removeThumb: { position: 'absolute', top: -4, right: -4, backgroundColor: '#fff', borderRadius: 10 },
+  uploadBtnSmall: { width: 56, height: 56, borderRadius: 12, borderWidth: 1.5, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
 });

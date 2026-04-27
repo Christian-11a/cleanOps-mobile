@@ -14,9 +14,9 @@ export default function BottomNav({ state, navigation, descriptors }: BottomTabB
   const { unreadCount } = useNotifications();
   const insets = useSafeAreaInsets();
 
-  const NAV_ITEMS = [
+  const NAV_ITEMS: { label: string; icon: string; name?: string; route?: string; isFab?: boolean; badge?: number }[] = [
     { label: 'Home',     icon: 'home-outline',     name: 'index' },
-    { label: 'Jobs',     icon: 'list-outline',     name: 'jobs' },
+    { label: 'Bookings', icon: 'list-outline',     name: 'jobs' },
     { label: 'Book',     icon: 'add',              route: '/customer/order', isFab: true },
     { label: 'Wallet',   icon: 'wallet-outline',   name: 'wallet' },
     { label: 'Profile',  icon: 'person-outline',   name: 'profile' },

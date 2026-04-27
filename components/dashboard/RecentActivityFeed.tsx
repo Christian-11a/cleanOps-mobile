@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/lib/themeContext';
+import { SkeletonBox } from '@/components/shared/SkeletonLoader';
 import type { Job } from '@/types';
 
 interface Props {
@@ -23,8 +24,19 @@ export function RecentActivityFeed({ jobs, role = 'customer', loading = false }:
 
   if (loading) {
     return (
-      <View style={styles.empty}>
-        <Text style={[styles.emptyText, { color: C.text3 }]}>Loading activities…</Text>
+      <View style={styles.container}>
+        {[1, 2, 3].map((i) => (
+          <View key={i} style={[styles.row, { backgroundColor: C.surface, borderColor: C.divider, opacity: 0.6 }]}>
+            <SkeletonBox width={40} height={40} borderRadius={12} />
+            <View style={styles.rowInfo}>
+              <View style={styles.rowTop}>
+                <SkeletonBox width={80} height={14} />
+                <SkeletonBox width={60} height={12} />
+              </View>
+              <SkeletonBox width={150} height={12} style={{ marginTop: 4 }} />
+            </View>
+          </View>
+        ))}
       </View>
     );
   }

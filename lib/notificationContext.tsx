@@ -2,18 +2,24 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { supabase } from './supabase';
 import { useAuth } from './authContext';
 import { useToast } from './toastContext';
-import { formatNotification, getNotifications, markAllNotificationsRead } from '@/actions/notifications';
+import { formatNotification, getNotifications, markAllNotificationsRead, markNotificationRead, deleteNotification, clearAllNotifications } from '@/actions/notifications';
 
 interface NotificationContextValue {
   unreadCount: number;
   refreshNotifications: () => Promise<void>;
   markAllRead: () => Promise<void>;
+  markAsRead: (id: string) => Promise<void>;
+  deleteNotif: (id: string) => Promise<void>;
+  clearAll: () => Promise<void>;
 }
 
 const NotificationContext = createContext<NotificationContextValue>({
   unreadCount: 0,
   refreshNotifications: async () => {},
   markAllRead: async () => {},
+  markAsRead: async () => {},
+  deleteNotif: async () => {},
+  clearAll: async () => {},
 });
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
@@ -53,7 +59,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         },
         (payload: any) => {
           const formatted = formatNotification(payload.new);
-          toast.show(formatted.title);
+          toast.show(formatted.title, 'info'); // Uses the professional title (e.g. Money Refunded)
           setUnreadCount(prev => prev + 1);
         }
       )
@@ -69,8 +75,23 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     setUnreadCount(0);
   };
 
+  const markAsRead = async (id: string) => {
+    await markNotificationRead(id);
+    setUnreadCount(prev => Math.max(0, prev - 1));
+  };
+
+  const deleteNotif = async (id: string) => {
+    await deleteNotification(id);
+    await fetchUnreadCount();
+  };
+
+  const clearAll = async () => {
+    await clearAllNotifications();
+    setUnreadCount(0);
+  };
+
   return (
-    <NotificationContext.Provider value={{ unreadCount, refreshNotifications: fetchUnreadCount, markAllRead }}>
+    <NotificationContext.Provider value={{ unreadCount, refreshNotifications: fetchUnreadCount, markAllRead, markAsRead, deleteNotif, clearAll }}>
       {children}
     </NotificationContext.Provider>
   );

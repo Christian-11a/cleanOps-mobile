@@ -48,7 +48,14 @@ export function JobCard({
 
   const timeAgo = formatTimeAgo(job.created_at);
   const taskCount = job.tasks?.length || 0;
-  const completedCount = 0; // Placeholder
+  // Use the persisted count from the DB (saved when employee submits).
+  // Falls back to taskCount for COMPLETED/PENDING_REVIEW in case old rows predate migration 043.
+  const rawCompleted = job.status === 'CANCELLED'
+    ? 0
+    : (job.tasks_completed_count ?? 0) > 0
+      ? job.tasks_completed_count!
+      : (job.status === 'COMPLETED' || job.status === 'PENDING_REVIEW' ? taskCount : 0);
+  const completedCount = Math.min(rawCompleted, taskCount);
 
   return (
     <TouchableOpacity
@@ -59,7 +66,9 @@ export function JobCard({
       <View style={st.cardInner}>
         <View style={st.topRow}>
           <View style={st.titleContainer}>
-            <Text style={[st.jobTitle, { color: C.text1 }]} numberOfLines={1}>{job.tasks?.[0] || 'Regular Clean'}</Text>
+            <Text style={[st.jobTitle, { color: C.text1 }]} numberOfLines={1}>
+              {job.title || job.tasks?.[0] || 'Regular Clean'}
+            </Text>
             <View style={st.locationRow}>
               <Ionicons name="location-outline" size={12} color={C.text3} />
               <Text style={[st.locationText, { color: C.text3 }]} numberOfLines={1}>
