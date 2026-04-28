@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, RefreshControl, StatusBar
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -16,6 +16,7 @@ import type { Review } from '@/types';
 
 export default function ReviewsScreen() {
   const router = useRouter();
+  const { employeeId, employeeName } = useLocalSearchParams<{ employeeId: string; employeeName: string }>();
   const { colors: C, isDark } = useTheme();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
@@ -25,17 +26,23 @@ export default function ReviewsScreen() {
   const [reviews, setReviews] = useState<any[]>([]);
 
   const fetchReviews = useCallback(async () => {
-    if (!user) return;
+    if (!user && !employeeId) return;
     try {
-      const { data, error } = await (supabase as any)
+      let query = (supabase as any)
         .from('reviews')
         .select(`
           *,
           reviewer:reviewer_id (full_name),
           reviewee:reviewee_id (full_name)
-        `)
-        .or(`reviewer_id.eq.${user.id},reviewee_id.eq.${user.id}`)
-        .order('created_at', { ascending: false });
+        `);
+
+      if (employeeId) {
+        query = query.eq('reviewee_id', employeeId);
+      } else {
+        query = query.eq('reviewer_id', user?.id);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
       setReviews(data || []);
@@ -45,7 +52,7 @@ export default function ReviewsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user]);
+  }, [user, employeeId]);
 
   useFocusEffect(useCallback(() => {
     fetchReviews();
@@ -64,7 +71,9 @@ export default function ReviewsScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[st.name, { color: C.text1 }]}>{name || 'Anonymous'}</Text>
-            <Text style={[st.type, { color: C.text3 }]}>{isReceived ? 'Received Review' : 'Your Review to Cleaner'}</Text>
+            <Text style={[st.type, { color: C.text3 }]}>
+              {employeeId ? 'Customer Review' : (isReceived ? 'Received Review' : 'Your Review to Cleaner')}
+            </Text>
           </View>
           <View style={st.ratingTag}>
             <Ionicons name="star" size={12} color="#fbbf24" />
@@ -90,7 +99,9 @@ export default function ReviewsScreen() {
         <TouchableOpacity style={[st.backBtn, { backgroundColor: C.surface2 }]} onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={22} color={C.text1} />
         </TouchableOpacity>
-        <Text style={[st.headerTitle, { color: C.text1 }]}>Reviews & Feedback</Text>
+        <Text style={[st.headerTitle, { color: C.text1 }]}>
+          {employeeId ? `${employeeName || 'Cleaner'}'s Reviews` : 'Ratings You Gave'}
+        </Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -109,7 +120,9 @@ export default function ReviewsScreen() {
                  <Ionicons name="star-outline" size={40} color={C.text3} />
               </View>
               <Text style={[st.emptyText, { color: C.text1 }]}>No reviews yet</Text>
-              <Text style={[st.emptySub, { color: C.text3 }]}>Your ratings from completed jobs will appear here.</Text>
+              <Text style={[st.emptySub, { color: C.text3 }]}>
+                {employeeId ? 'This cleaner has not received any reviews yet.' : 'Your ratings from completed jobs will appear here.'}
+              </Text>
             </View>
           }
         />

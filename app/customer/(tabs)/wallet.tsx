@@ -13,6 +13,7 @@ import { useTheme } from '@/lib/themeContext';
 import { useToast } from '@/lib/toastContext';
 import { addMoney, getBalance, withdraw, getTransactions } from '@/actions/payments';
 import { getCustomerJobs } from '@/actions/jobs';
+import { getPlatformFee } from '@/actions/config';
 import { useAuth } from '@/lib/authContext';
 import { getPaymentMethods, addPaymentMethod, setDefaultPaymentMethod, removePaymentMethod } from '@/stores/paymentStore';
 import { 
@@ -48,6 +49,7 @@ export default function CustomerWalletTab() {
   const [depositAmount, setDepositAmount] = useState('100');
   const [withdrawAmount, setWithdrawAmount] = useState('100');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [fee, setFee] = useState(15);
 
   const [cardBrand, setCardBrand] = useState<PaymentBrand>('Visa');
   const [cardNumber, setCardNumber] = useState('');
@@ -61,14 +63,16 @@ export default function CustomerWalletTab() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [jobs, methods, txs] = await Promise.all([
+      const [jobs, methods, txs, feeVal] = await Promise.all([
         getCustomerJobs(),
         getPaymentMethods(),
         getTransactions(),
+        getPlatformFee(),
       ]);
       setRecentJobs(jobs);
       setPaymentMethods(methods);
       setAllTransactions(txs);
+      setFee(feeVal);
     } catch (e) {
       if (__DEV__) console.warn('Wallet fetch error:', e);
       toast.show('Failed to load wallet data. Pull to refresh.', 'error');
@@ -411,7 +415,7 @@ export default function CustomerWalletTab() {
         <View style={[st.escrowNote, { backgroundColor: C.surface2, borderColor: C.divider }]}>
           <Ionicons name="information-circle-outline" size={16} color={C.text3} />
           <Text style={[st.escrowNoteText, { color: C.text3 }]}>
-            Payments are held in escrow and released only after you approve completed work. Platform fee: 10%.
+            Payments are held in escrow and released only after you approve completed work. Platform fee: {fee}%.
           </Text>
         </View>
       </ScrollView>

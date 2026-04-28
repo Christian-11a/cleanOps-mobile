@@ -45,7 +45,7 @@ export default function CustomerJobDetailScreen() {
   const [selectedImage,  setSelectedImage] = useState<string | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [applicantProfile, setApplicantProfile] = useState<{
-    full_name: string; rating: number | null; phone: string | null;
+    id: string; full_name: string; rating: number | null; phone: string | null;
     created_at: string; jobs_completed: number;
   } | null>(null);
   const [applicantReviews, setApplicantReviews] = useState<any[]>([]);
@@ -204,6 +204,7 @@ export default function CustomerJobDetailScreen() {
         getProfileReviews(workerId)
       ]);
       setApplicantProfile({
+        id: workerId,
         full_name: prof?.full_name || 'Unknown',
         rating: prof?.rating ? Number(prof.rating) : null,
         phone: prof?.phone || null,
@@ -620,7 +621,13 @@ export default function CustomerJobDetailScreen() {
                       {applicantReviews.length > 3 && (
                         <TouchableOpacity onPress={() => {
                           setShowProfileModal(false);
-                          router.push('/customer/profile/reviews');
+                          router.push({
+                            pathname: '/customer/profile/reviews',
+                            params: { 
+                              employeeId: applicantProfile?.id,
+                              employeeName: applicantProfile?.full_name || job?.employee_name
+                            }
+                          });
                         }}>
                           <Text style={{ fontSize: 12, color: C.blue600, fontWeight: '600' }}>See All</Text>
                         </TouchableOpacity>

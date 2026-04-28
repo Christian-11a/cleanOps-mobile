@@ -10,6 +10,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getJob, applyForJob, updateJobStatus, uploadProofImage, hasEmployeeAppliedToJob } from '@/actions/jobs';
+import { getPlatformFee } from '@/actions/config';
 import { submitDispute } from '@/actions/disputes';
 import { useTheme } from '@/lib/themeContext';
 import { useToast } from '@/lib/toastContext';
@@ -45,6 +46,7 @@ export default function EmployeeJobDetailScreen() {
   // Submission State
   const [proofDesc, setProofDesc] = useState('');
   const [images,    setImages]    = useState<string[]>([]);
+  const [fee,       setFee]       = useState(15);
 
   // Dispute State
   const [showDisputeModal, setShowDisputeModal] = useState(false);
@@ -84,14 +86,16 @@ export default function EmployeeJobDetailScreen() {
 
   const fetchJob = async () => {
     try {
-      // 1. Fetch only essential data (Job info + specific applied check)
-      const [data, alreadyApplied] = await Promise.all([
+      // 1. Fetch only essential data (Job info + specific applied check + platform fee)
+      const [data, alreadyApplied, feeVal] = await Promise.all([
         getJob(id),
-        hasEmployeeAppliedToJob(id)
+        hasEmployeeAppliedToJob(id),
+        getPlatformFee()
       ]);
 
       setJob(data);
       setHasApplied(alreadyApplied);
+      setFee(feeVal);
 
       if (data.status === 'PENDING_REVIEW' || data.status === 'COMPLETED') {
          const all = new Set(data.tasks.map((_, i) => i));
@@ -274,7 +278,7 @@ export default function EmployeeJobDetailScreen() {
   const isInProgress  = job.status === 'IN_PROGRESS';
   const isPendingReview = job.status === 'PENDING_REVIEW';
   const isCompleted   = job.status === 'COMPLETED';
-  const estPayout     = (job.price_amount * 0.9);
+  const estPayout     = (job.price_amount * (1 - fee / 100));
 
   if (showChat) {
     return (
@@ -330,7 +334,7 @@ export default function EmployeeJobDetailScreen() {
                 <Text style={st.priceValue}>${job.price_amount.toFixed(0)}</Text>
              </View>
              <View style={st.payoutPill}>
-                <Text style={st.payoutText}>Your Earning (90%): <Text style={st.payoutBold}>${estPayout.toFixed(2)}</Text></Text>
+                <Text style={st.payoutText}>Your Earning ({100 - fee}%): <Text style={st.payoutBold}>${estPayout.toFixed(2)}</Text></Text>
              </View>
           </View>
         </LinearGradient>

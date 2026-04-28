@@ -12,6 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/lib/themeContext';
 import { useToast } from '@/lib/toastContext';
 import { getBalance, withdraw, getTransactions } from '@/actions/payments';
+import { getPlatformFee } from '@/actions/config';
 import { getEmployeeJobs } from '@/actions/jobs';
 import { useAuth } from '@/lib/authContext';
 import { getPaymentMethods, addPaymentMethod, setDefaultPaymentMethod, removePaymentMethod } from '@/stores/paymentStore';
@@ -42,15 +43,18 @@ export default function EmployeeWalletTab() {
   
   const [withdrawAmount, setWithdrawAmount] = useState('100');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [fee, setFee] = useState(15);
 
   const fetchData = useCallback(async () => {
     try {
-      const [txs, methods] = await Promise.all([
+      const [txs, methods, feeVal] = await Promise.all([
         getTransactions(),
         getPaymentMethods(),
+        getPlatformFee(),
       ]);
       setAllTransactions(txs);
       setPaymentMethods(methods);
+      setFee(feeVal);
     } catch (e) {
       if (__DEV__) console.warn(e);
     } finally {
@@ -148,7 +152,7 @@ export default function EmployeeWalletTab() {
 
               if (tx.type === 'PAYMENT') { iconName = 'cash-outline'; iconColor = '#ef4444'; bgColor = '#fff1f2'; }
               if (tx.type === 'PAYOUT') { iconName = 'add-outline'; iconColor = '#22c55e'; bgColor = '#f0fdf4'; }
-              if (tx.type === 'TOP_UP') { iconName = 'add-outline'; iconColor = C.blue600; bgColor = isDark ? C.blue900 + '20' : '#eff6ff'; }
+              if (tx.type === 'TOP_UP') { iconName = 'add-outline'; iconColor = C.blue600; bgColor = isDark ? C.blue800 + '20' : '#eff6ff'; }
               if (tx.type === 'REFUND') { iconName = 'refresh-outline'; iconColor = '#22c55e'; bgColor = '#f0fdf4'; }
               if (tx.type === 'WITHDRAWAL') { iconName = 'arrow-up-outline'; iconColor = '#ef4444'; bgColor = '#fff1f2'; }
 
@@ -177,7 +181,7 @@ export default function EmployeeWalletTab() {
         <View style={[st.infoNote, { backgroundColor: isDark ? C.surface2 : '#f8fafc', borderColor: C.divider }]}>
            <Ionicons name="information-circle" size={18} color={C.text3} />
            <Text style={[st.infoNoteText, { color: C.text3 }]}>
-             Earnings are released after customer approval. A 10% platform fee applies to all jobs.
+             Earnings are released after customer approval. A {fee}% platform fee applies to all jobs.
            </Text>
         </View>
       </ScrollView>

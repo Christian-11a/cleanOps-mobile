@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getEmployeeJobs } from '@/actions/jobs';
+import { getPlatformFee } from '@/actions/config';
 import { useTheme } from '@/lib/themeContext';
 import { useAuth } from '@/lib/authContext';
 import { formatTimeAgo } from '@/lib/utils';
@@ -23,11 +24,16 @@ export default function EmployeeHistoryScreen() {
   const [jobs,       setJobs]       = useState<Job[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fee,        setFee]        = useState(15);
 
   const fetchJobs = useCallback(async () => {
     try {
-      const all = await getEmployeeJobs();
+      const [all, feeVal] = await Promise.all([
+        getEmployeeJobs(),
+        getPlatformFee()
+      ]);
       setJobs(all.filter((j) => j.status === 'COMPLETED' || j.status === 'CANCELLED'));
+      setFee(feeVal);
     } catch (e) { if (__DEV__) console.warn(e); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
@@ -44,7 +50,7 @@ export default function EmployeeHistoryScreen() {
   
   const stats = useMemo(() => {
     const totalGross = completedJobs.reduce((s, j) => s + Number(j.price_amount), 0);
-    const totalNet   = totalGross * 0.9;
+    const totalNet   = totalGross * (1 - fee / 100);
     const bestJob    = [...completedJobs].sort((a, b) => Number(b.price_amount) - Number(a.price_amount))[0];
     
     return {
@@ -53,7 +59,7 @@ export default function EmployeeHistoryScreen() {
       avgPayout: completedJobs.length > 0 ? (totalNet / completedJobs.length) : 0,
       bestJob
     };
-  }, [completedJobs]);
+  }, [completedJobs, fee]);
 
   const renderHeader = () => (
     <View>
@@ -104,7 +110,7 @@ export default function EmployeeHistoryScreen() {
               <View style={{ flex: 1 }}>
                  <Text style={[st.bestLabel, { color: C.text3 }]}>Best Payout</Text>
                  <Text style={[st.bestTitle, { color: C.text1 }]}>{stats.bestJob.size || 'Home'} Clean</Text>
-                 <Text style={st.bestAmt}>${(Number(stats.bestJob.price_amount) * 0.9).toFixed(2)} earned</Text>
+                 <Text style={st.bestAmt}>${(Number(stats.bestJob.price_amount) * (1 - fee / 100)).toFixed(2)} earned</Text>
               </View>
            </View>
          )}
@@ -113,7 +119,7 @@ export default function EmployeeHistoryScreen() {
          <View style={[st.feeBanner, { backgroundColor: C.surface2, borderColor: C.divider }]}>
             <Ionicons name="information-circle" size={18} color={C.text3} />
             <Text style={[st.feeText, { color: C.text3 }]}>
-              Platform fee: 10% per job. You keep 90% of every payment.
+              Platform fee: {fee}% per job. You keep {100 - fee}% of every payment.
             </Text>
          </View>
 
@@ -123,8 +129,8 @@ export default function EmployeeHistoryScreen() {
   );
 
   const renderJobItem = ({ item }: { item: Job }) => {
-    const myEarning = Number(item.price_amount) * 0.9;
-    const fee = Number(item.price_amount) * 0.1;
+    const myEarning = Number(item.price_amount) * (1 - fee / 100);
+    const feeAmt = Number(item.price_amount) * (fee / 100);
     const dateStr = new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
     return (
@@ -155,8 +161,8 @@ export default function EmployeeHistoryScreen() {
         </View>
         
         <View style={st.feeRow}>
-           <Text style={[st.feeLabel, { color: C.text3 }]}>Platform fee (10%)</Text>
-           <Text style={[st.feeAmt, { color: C.error }]}>-${fee.toFixed(2)}</Text>
+           <Text style={[st.feeLabel, { color: C.text3 }]}>Platform fee ({fee}%)</Text>
+           <Text style={[st.feeAmt, { color: C.error }]}>-${feeAmt.toFixed(2)}</Text>
         </View>
       </TouchableOpacity>
     );
