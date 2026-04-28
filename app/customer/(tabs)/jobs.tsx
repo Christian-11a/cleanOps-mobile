@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   TextInput, Alert, RefreshControl, ActivityIndicator, BackHandler, StatusBar
@@ -20,7 +21,7 @@ const FILTERS: { value: FilterVal; label: string }[] = [
   { value: 'OPEN',           label: 'Open' },
   { value: 'IN_PROGRESS',    label: 'In Progress' },
   { value: 'PENDING_REVIEW', label: 'Review' },
-  { value: 'COMPLETED',      label: 'Done' },
+  { value: 'COMPLETED',      label: 'Completed' },
   { value: 'CANCELLED',      label: 'Cancelled' },
 ];
 
@@ -46,6 +47,7 @@ export default function CustomerJobsTab() {
   }, []);
 
   useEffect(() => { fetchJobs(); }, [fetchJobs]);
+  useFocusEffect(useCallback(() => { fetchJobs(); }, [fetchJobs]));
 
   const counts: Record<FilterVal, number> = {
     all:            jobs.length,
@@ -173,7 +175,11 @@ export default function CustomerJobsTab() {
 
 const st = StyleSheet.create({
   container: { flex: 1 },
-  headerGradient: { paddingBottom: 20 },
+  headerGradient: { 
+    paddingBottom: 20,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+  },
   headerContent: { paddingHorizontal: 20, marginBottom: 20 },
   headerTextWrap: { gap: 4 },
   headerTitle: { fontSize: 24, fontWeight: '800', color: '#fff' },

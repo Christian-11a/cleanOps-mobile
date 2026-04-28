@@ -55,26 +55,27 @@ export default function LoginScreen() {
   async function handleLogin() {
     const ev = validateField('email', email);
     const pv = validateField('password', password);
+
+    // Set both as touched to ensure errors are visible
+    setTouched({ email: true, password: true });
+
     if (!ev || !pv) return;
 
     setLoading(true);
     try {
       await signIn(email.trim().toLowerCase(), password);
       // Success is handled by the auth state listener in _layout.tsx
-      toast.show('Welcome back!');
     } catch (err: any) {
       if (__DEV__) console.warn('Login error:', err);
       let msg = 'Incorrect email or password.';
       if (err.message === 'Invalid login credentials') msg = 'Invalid email or password.';
       else if (err.message) msg = err.message;
-      
+
       setErrors((prev) => ({ ...prev, password: msg }));
-      toast.show(msg);
     } finally {
       setLoading(false);
     }
   }
-
   async function handleForgotSubmit() {
     if (!forgotEmail.trim()) { setForgotEmailErr('Email is required.'); return; }
     if (!EMAIL_RE.test(forgotEmail.trim())) { setForgotEmailErr('Enter a valid email address.'); return; }

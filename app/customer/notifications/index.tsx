@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, RefreshControl, StatusBar, Platform
+  ActivityIndicator, RefreshControl, StatusBar, Platform, Alert
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,7 +16,7 @@ import { formatTimeAgo } from '@/lib/utils';
 export default function CustomerNotificationsScreen() {
   const router = useRouter();
   const { colors: C, isDark } = useTheme();
-  const { markAllRead } = useNotifications();
+  const { markAllRead, markAsRead, deleteNotif, clearAll } = useNotifications();
   const insets = useSafeAreaInsets();
 
   const [loading, setLoading] = useState(true);
@@ -35,12 +36,54 @@ export default function CustomerNotificationsScreen() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+  useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
 
   const onRefresh = () => { setRefreshing(true); fetchData(); };
 
   const handleMarkAllRead = async () => {
     await markAllRead();
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+  };
+
+  const handleMarkRead = async (id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+    try {
+      await markAsRead(id);
+    } catch {
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: false } : n));
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    // Optimistic UI update
+    setNotifications(prev => prev.filter(n => n.id !== id));
+    try {
+      await deleteNotif(id);
+    } catch (e) {
+      fetchData(); // Rollback on error
+    }
+  };
+
+  const handleClearAll = () => {
+    Alert.alert(
+      "Clear All Notifications",
+      "Are you sure you want to delete all notifications? This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete All", 
+          style: "destructive",
+          onPress: async () => {
+            setNotifications([]);
+            try {
+              await clearAll();
+            } catch (e) {
+              fetchData();
+            }
+          }
+        }
+      ]
+    );
   };
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
@@ -51,25 +94,49 @@ export default function CustomerNotificationsScreen() {
     const borderCol = isDark ? color + '40' : (color === '#16a34a' ? '#bbf7d0' : color === '#0284c7' ? '#bae6fd' : '#fde68a');
 
     return (
-      <TouchableOpacity
-        style={[st.notifCard, { backgroundColor: cardBg, borderColor: borderCol }]}
-        onPress={() => {
-          const jobId = item.payload?.job_id;
-          if (jobId) router.push(`/customer/jobs/${jobId}`);
-        }}
-      >
-        <View style={[st.iconBox, { backgroundColor: 'rgba(255,255,255,0.6)' }]}>
-          <Text style={{ fontSize: 18 }}>{icon}</Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <View style={st.notifTop}>
-            <Text style={[st.notifTitle, { color: isDark ? C.text1 : color }]}>{title}</Text>
-            {!item.is_read && <View style={[st.unreadDot, { backgroundColor: color }]} />}
+      <View style={[st.cardWrapper]}>
+        <TouchableOpacity
+          style={[st.notifCard, { backgroundColor: cardBg, borderColor: borderCol, opacity: item.is_read ? 0.8 : 1 }]}
+          activeOpacity={0.7}
+          onPress={async () => {
+            if (!item.is_read) {
+              await handleMarkRead(item.id);
+            }
+            
+            const jobId = item.payload?.job_id;
+            const type = item.type;
+
+            if (type === 'new_review' || type === 'rating') {
+              router.push('/customer/profile/reviews');
+            } else if (type === 'money_added' || type === 'money_withdrawn' || type.includes('payout')) {
+              router.push('/customer/(tabs)/wallet');
+            } else if (jobId) {
+              router.push(`/customer/jobs/${jobId}`);
+            }
+          }}
+        >
+          <View style={[st.iconBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.6)' }]}>
+            <Text style={{ fontSize: 18 }}>{icon}</Text>
           </View>
-          <Text style={[st.notifDesc, { color: isDark ? C.text2 : '#45556c' }]}>{desc}</Text>
-          <Text style={[st.notifTime, { color: C.text3 }]}>{formatTimeAgo(item.created_at)}</Text>
-        </View>
-      </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <View style={st.notifTop}>
+              <Text style={[st.notifTitle, { color: isDark ? C.text1 : color, fontWeight: item.is_read ? '600' : '800' }]}>{title}</Text>
+              {!item.is_read && <View style={[st.unreadDot, { backgroundColor: color }]} />}
+            </View>
+            <Text style={[st.notifDesc, { color: isDark ? C.text2 : '#45556c' }]}>{desc}</Text>
+            
+            <View style={st.notifFooter}>
+               <Text style={[st.notifTime, { color: C.text3 }]}>{formatTimeAgo(item.created_at)}</Text>
+               <TouchableOpacity 
+                 style={st.deleteItemBtn} 
+                 onPress={() => handleDelete(item.id)}
+               >
+                 <Ionicons name="trash-outline" size={16} color={C.text3} />
+               </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
     );
   };
 
@@ -90,12 +157,15 @@ export default function CustomerNotificationsScreen() {
             <Text style={st.headerTitle}>Notifications</Text>
             <Text style={st.headerSub}>{unreadCount} unread</Text>
           </View>
-          {unreadCount > 0 && (
-            <TouchableOpacity style={st.markReadBtn} onPress={handleMarkAllRead}>
-              <Ionicons name="checkmark-done" size={14} color="#fff" />
-              <Text style={st.markReadText}>Mark all read</Text>
-            </TouchableOpacity>
-          )}
+          
+          <View style={st.headerActions}>
+            {unreadCount > 0 && (
+              <TouchableOpacity style={st.markReadBtn} onPress={handleMarkAllRead}>
+                <Ionicons name="checkmark-done" size={14} color="#fff" />
+                <Text style={st.markReadText}>Mark all read</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </LinearGradient>
 
@@ -111,13 +181,21 @@ export default function CustomerNotificationsScreen() {
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
             notifications.length > 0
-              ? <Text style={[st.sectionLabel, { color: C.text3 }]}>RECENT ({notifications.length})</Text>
-              : null
+              ? (
+                <View style={st.sectionHeader}>
+                  <Text style={[st.sectionLabel, { color: C.text3 }]}>RECENT UPDATES</Text>
+                  <TouchableOpacity onPress={handleClearAll}>
+                    <Text style={[st.clearAllText, { color: C.blue600 }]}>Clear All</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null
           }
           ListEmptyComponent={
             <View style={st.emptyState}>
-              <Ionicons name="notifications-off-outline" size={48} color={C.text3} />
-              <Text style={[st.emptyText, { color: C.text3 }]}>No notifications yet.</Text>
+              <View style={[st.emptyIconBox, { backgroundColor: isDark ? C.surface2 : '#f1f5f9' }]}>
+                <Ionicons name="notifications-off-outline" size={48} color={C.text3} />
+              </View>
+              <Text style={[st.emptyText, { color: C.text1 }]}>No notifications yet.</Text>
               <Text style={[st.emptySub, { color: C.text3 }]}>Activity from your jobs will appear here.</Text>
             </View>
           }
@@ -134,19 +212,30 @@ const st = StyleSheet.create({
   backBtn: { width: 36, height: 36, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
   headerSub: { fontSize: 12, color: 'rgba(255,255,255,0.55)' },
+  headerActions: { flexDirection: 'row', gap: 8 },
+  actionBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
   markReadBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14 },
   markReadText: { fontSize: 11, fontWeight: '700', color: '#fff' },
+  
   scroll: { padding: 16 },
-  sectionLabel: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5, marginBottom: 16, marginLeft: 4 },
-  notifCard: { flexDirection: 'row', padding: 16, borderRadius: 24, borderWidth: 1, gap: 12, marginBottom: 12, ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8 }, android: { elevation: 2 } }) },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingHorizontal: 4 },
+  sectionLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  clearAllText: { fontSize: 12, fontWeight: '700' },
+  
+  cardWrapper: { marginBottom: 12 },
+  notifCard: { flexDirection: 'row', padding: 16, borderRadius: 24, borderWidth: 1, gap: 12, ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8 }, android: { elevation: 2 } }) },
   iconBox: { width: 40, height: 40, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(0,0,0,0.05)' },
   notifTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
-  notifTitle: { fontSize: 14, fontWeight: '800' },
+  notifTitle: { fontSize: 14 },
   unreadDot: { width: 8, height: 8, borderRadius: 4 },
-  notifDesc: { fontSize: 12, lineHeight: 18, fontWeight: '500', marginBottom: 4 },
+  notifDesc: { fontSize: 12, lineHeight: 18, fontWeight: '500', marginBottom: 8 },
+  notifFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   notifTime: { fontSize: 11, fontWeight: '500' },
+  deleteItemBtn: { padding: 4 },
+  
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 80, gap: 12 },
-  emptyText: { fontSize: 15, fontWeight: '700' },
-  emptySub: { fontSize: 13, textAlign: 'center', paddingHorizontal: 40 },
+  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 100, gap: 16 },
+  emptyIconBox: { width: 100, height: 100, borderRadius: 50, alignItems: 'center', justifyContent: 'center' },
+  emptyText: { fontSize: 18, fontWeight: '800' },
+  emptySub: { fontSize: 14, textAlign: 'center', paddingHorizontal: 60, lineHeight: 20 },
 });

@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Platform, StatusBar
+  ActivityIndicator, RefreshControl, StatusBar, Platform, Alert
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,7 +16,7 @@ import { formatTimeAgo } from '@/lib/utils';
 export default function EmployeeNotificationsScreen() {
   const router = useRouter();
   const { colors: C, isDark } = useTheme();
-  const { markAllRead } = useNotifications();
+  const { markAllRead, markAsRead, deleteNotif, clearAll } = useNotifications();
   const insets = useSafeAreaInsets();
 
   const [loading, setLoading] = useState(true);
@@ -35,6 +36,7 @@ export default function EmployeeNotificationsScreen() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+  useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
 
   const onRefresh = () => { setRefreshing(true); fetchData(); };
 
@@ -43,56 +45,125 @@ export default function EmployeeNotificationsScreen() {
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
   };
 
+  const handleMarkRead = async (id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+    try {
+      await markAsRead(id);
+    } catch {
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: false } : n));
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+    try {
+      await deleteNotif(id);
+    } catch (e) {
+      fetchData();
+    }
+  };
+
+  const handleClearAll = () => {
+    Alert.alert(
+      "Clear All Notifications",
+      "Are you sure you want to delete all notifications?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete All", 
+          style: "destructive",
+          onPress: async () => {
+            setNotifications([]);
+            try {
+              await clearAll();
+            } catch (e) {
+              fetchData();
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
   const renderItem = ({ item }: { item: DBNotification }) => {
     const { title, desc, icon, color } = formatNotification(item);
+    const cardBg = isDark ? C.surface : (color === '#16a34a' ? '#f0fdf4' : color === '#0284c7' ? '#e0f2fe' : '#fffbeb');
+    const borderCol = isDark ? color + '40' : (color === '#16a34a' ? '#bbf7d0' : color === '#0284c7' ? '#bae6fd' : '#fde68a');
+
     return (
-      <TouchableOpacity
-        style={[st.notifCard, { backgroundColor: C.surface, borderColor: item.is_read ? C.divider : color + '60' }]}
-        onPress={() => {
-          const jobId = item.payload?.job_id;
-          if (jobId) router.push(`/employee/jobs/${jobId}`);
-        }}
-        activeOpacity={0.75}
-      >
-        <View style={[st.notifIconWrap, { backgroundColor: color + '18' }]}>
-          <Text style={st.notifEmoji}>{icon}</Text>
-        </View>
-        <View style={st.notifContent}>
-          <View style={st.notifHeader}>
-            <Text style={[st.notifTitle, { color: C.text1 }]}>{title}</Text>
-            {!item.is_read && <View style={[st.unreadDot, { backgroundColor: color }]} />}
+      <View style={st.cardWrapper}>
+        <TouchableOpacity
+          style={[st.notifCard, { backgroundColor: cardBg, borderColor: borderCol, opacity: item.is_read ? 0.8 : 1 }]}
+          activeOpacity={0.7}
+          onPress={async () => {
+            if (!item.is_read) {
+              await handleMarkRead(item.id);
+            }
+            
+            const jobId = item.payload?.job_id;
+            const type = item.type;
+
+            if (type === 'new_review' || type === 'rating') {
+              router.push('/employee/profile/reviews');
+            } else if (type === 'money_added' || type === 'money_withdrawn' || type.includes('payout')) {
+              router.push('/employee/(tabs)/wallet');
+            } else if (jobId) {
+              router.push(`/employee/jobs/${jobId}`);
+            }
+          }}
+        >
+          <View style={[st.iconBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.6)' }]}>
+            <Text style={{ fontSize: 18 }}>{icon}</Text>
           </View>
-          <Text style={[st.notifDesc, { color: C.text2 }]} numberOfLines={2}>{desc}</Text>
-          <Text style={[st.notifTime, { color: C.text3 }]}>{formatTimeAgo(item.created_at)}</Text>
-        </View>
-      </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <View style={st.notifTop}>
+              <Text style={[st.notifTitle, { color: isDark ? C.text1 : color, fontWeight: item.is_read ? '600' : '800' }]}>{title}</Text>
+              {!item.is_read && <View style={[st.unreadDot, { backgroundColor: color }]} />}
+            </View>
+            <Text style={[st.notifDesc, { color: isDark ? C.text2 : '#45556c' }]}>{desc}</Text>
+            
+            <View style={st.notifFooter}>
+               <Text style={[st.notifTime, { color: C.text3 }]}>{formatTimeAgo(item.created_at)}</Text>
+               <TouchableOpacity 
+                 style={st.deleteItemBtn} 
+                 onPress={() => handleDelete(item.id)}
+               >
+                 <Ionicons name="trash-outline" size={16} color={C.text3} />
+               </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
     );
   };
 
   return (
     <View style={[st.container, { backgroundColor: C.bg }]}>
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+      <StatusBar barStyle="light-content" />
 
       <LinearGradient
         colors={['#0A0F1E', '#1e293b']}
         style={[st.header, { paddingTop: insets.top + 12 }]}
       >
-        <View style={st.headerTop}>
+        <View style={st.headerContent}>
           <TouchableOpacity style={st.backBtn} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={22} color="#fff" />
+            <Ionicons name="chevron-back" size={24} color="#fff" />
           </TouchableOpacity>
-          <View style={st.titleWrap}>
-            <Text style={st.title}>Notifications</Text>
-            <Text style={st.subtitle}>{unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={st.headerTitle}>Notifications</Text>
+            <Text style={st.headerSub}>{unreadCount} unread</Text>
           </View>
-          {unreadCount > 0 && (
-            <TouchableOpacity style={st.markReadBtn} onPress={handleMarkAllRead}>
-              <Ionicons name="checkmark-done-outline" size={16} color="#22c55e" />
-              <Text style={[st.markReadText, { color: '#22c55e' }]}>Mark all read</Text>
-            </TouchableOpacity>
-          )}
+          
+          <View style={st.headerActions}>
+            {unreadCount > 0 && (
+              <TouchableOpacity style={st.markReadBtn} onPress={handleMarkAllRead}>
+                <Ionicons name="checkmark-done" size={14} color="#fff" />
+                <Text style={st.markReadText}>Mark all read</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </LinearGradient>
 
@@ -103,19 +174,27 @@ export default function EmployeeNotificationsScreen() {
           data={notifications}
           keyExtractor={n => n.id}
           renderItem={renderItem}
-          contentContainerStyle={[st.listContent, { paddingBottom: insets.bottom + 40 }]}
+          contentContainerStyle={[st.scroll, { paddingBottom: insets.bottom + 20 }]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.blue600} />}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
             notifications.length > 0
-              ? <Text style={[st.sectionTitle, { color: C.text3 }]}>Recent Activity</Text>
-              : null
+              ? (
+                <View style={st.sectionHeader}>
+                  <Text style={[st.sectionLabel, { color: C.text3 }]}>RECENT UPDATES</Text>
+                  <TouchableOpacity onPress={handleClearAll}>
+                    <Text style={[st.clearAllText, { color: C.blue600 }]}>Clear All</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null
           }
           ListEmptyComponent={
-            <View style={st.empty}>
-              <Ionicons name="notifications-off-outline" size={48} color={C.text3} />
-              <Text style={[st.emptyTitle, { color: C.text1 }]}>No notifications</Text>
-              <Text style={[st.emptySub, { color: C.text3 }]}>Approved jobs and payouts will appear here.</Text>
+            <View style={st.emptyState}>
+              <View style={[st.emptyIconBox, { backgroundColor: isDark ? C.surface2 : '#f1f5f9' }]}>
+                <Ionicons name="notifications-off-outline" size={48} color={C.text3} />
+              </View>
+              <Text style={[st.emptyText, { color: C.text1 }]}>No notifications yet.</Text>
+              <Text style={[st.emptySub, { color: C.text3 }]}>Important job alerts will appear here.</Text>
             </View>
           }
         />
@@ -126,27 +205,35 @@ export default function EmployeeNotificationsScreen() {
 
 const st = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingHorizontal: 20, paddingBottom: 16, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
-  headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  backBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
-  titleWrap: { flex: 1, marginLeft: 12 },
-  title: { fontSize: 18, fontWeight: '800', color: '#fff' },
-  subtitle: { fontSize: 12, fontWeight: '500', color: '#94a3b8' },
-  markReadBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  markReadText: { fontSize: 12, fontWeight: '700' },
-  listContent: { padding: 16 },
-  sectionTitle: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 12, marginLeft: 4 },
-  notifCard: { flexDirection: 'row', padding: 16, borderRadius: 20, borderWidth: 1, marginBottom: 12, gap: 12 },
-  notifIconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  notifEmoji: { fontSize: 20 },
-  notifContent: { flex: 1, gap: 4 },
-  notifHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  notifTitle: { fontSize: 14, fontWeight: '800' },
+  header: { paddingBottom: 20, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
+  headerContent: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, gap: 12 },
+  backBtn: { width: 36, height: 36, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
+  headerSub: { fontSize: 12, color: '#94a3b8' },
+  headerActions: { flexDirection: 'row', gap: 8 },
+  actionBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
+  markReadBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14 },
+  markReadText: { fontSize: 11, fontWeight: '700', color: '#fff' },
+  
+  scroll: { padding: 16 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingHorizontal: 4 },
+  sectionLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  clearAllText: { fontSize: 12, fontWeight: '700' },
+  
+  cardWrapper: { marginBottom: 12 },
+  notifCard: { flexDirection: 'row', padding: 16, borderRadius: 24, borderWidth: 1, gap: 12, ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8 }, android: { elevation: 2 } }) },
+  iconBox: { width: 40, height: 40, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(0,0,0,0.05)' },
+  notifTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
+  notifTitle: { fontSize: 14 },
   unreadDot: { width: 8, height: 8, borderRadius: 4 },
-  notifDesc: { fontSize: 13, lineHeight: 18 },
-  notifTime: { fontSize: 11, fontWeight: '500', marginTop: 2 },
+  notifDesc: { fontSize: 12, lineHeight: 18, fontWeight: '500', marginBottom: 8 },
+  notifFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  notifTime: { fontSize: 11, fontWeight: '500' },
+  deleteItemBtn: { padding: 4 },
+  
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  empty: { alignItems: 'center', paddingTop: 60, gap: 12 },
-  emptyTitle: { fontSize: 18, fontWeight: '800' },
-  emptySub: { fontSize: 13, textAlign: 'center', paddingHorizontal: 40 },
+  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 100, gap: 16 },
+  emptyIconBox: { width: 100, height: 100, borderRadius: 50, alignItems: 'center', justifyContent: 'center' },
+  emptyText: { fontSize: 18, fontWeight: '800' },
+  emptySub: { fontSize: 14, textAlign: 'center', paddingHorizontal: 60, lineHeight: 20 },
 });

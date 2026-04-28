@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, TextInput, Modal, KeyboardAvoidingView,
@@ -10,7 +11,7 @@ import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-ico
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/lib/themeContext';
 import { useToast } from '@/lib/toastContext';
-import { addMoney, getBalance, withdraw } from '@/actions/payments';
+import { addMoney, getBalance, withdraw, getTransactions } from '@/actions/payments';
 import { getCustomerJobs } from '@/actions/jobs';
 import { useAuth } from '@/lib/authContext';
 import { getPaymentMethods, addPaymentMethod, setDefaultPaymentMethod, removePaymentMethod } from '@/stores/paymentStore';
@@ -34,19 +35,20 @@ export default function CustomerWalletTab() {
   const [refreshing, setRefreshing] = useState(false);
   const [recentJobs, setRecentJobs] = useState<Job[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
-  
+  const [allTransactions, setAllTransactions] = useState<any[]>([]);
+
   // Modals
   const [showAddMoney, setShowAddMoney] = useState(false);
   const [showWithdrawMoney, setShowWithdrawMoney] = useState(false);
   const [showAddPayment, setShowAddPayment] = useState(false);
   const [showManagePayments, setShowManagePayments] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  
+
   // Forms
   const [depositAmount, setDepositAmount] = useState('100');
   const [withdrawAmount, setWithdrawAmount] = useState('100');
   const [isProcessing, setIsProcessing] = useState(false);
-  
+
   const [cardBrand, setCardBrand] = useState<PaymentBrand>('Visa');
   const [cardNumber, setCardNumber] = useState('');
   const [expiry, setExpiry] = useState('');
@@ -59,12 +61,14 @@ export default function CustomerWalletTab() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [jobs, methods] = await Promise.all([
+      const [jobs, methods, txs] = await Promise.all([
         getCustomerJobs(),
         getPaymentMethods(),
+        getTransactions(),
       ]);
       setRecentJobs(jobs);
       setPaymentMethods(methods);
+      setAllTransactions(txs);
     } catch (e) {
       if (__DEV__) console.warn('Wallet fetch error:', e);
       toast.show('Failed to load wallet data. Pull to refresh.', 'error');
@@ -74,9 +78,10 @@ export default function CustomerWalletTab() {
     }
   }, []);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     fetchData();
-  }, [fetchData]);
+    refreshProfile();
+  }, [fetchData, refreshProfile]));
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -227,11 +232,14 @@ export default function CustomerWalletTab() {
     setIsProcessing(true);
     try {
       await addMoney(amount);
-      await refreshProfile();
-      await fetchData();
+      // Close modal and show success immediately
       setShowAddMoney(false);
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
+      
+      // Refresh data in background
+      refreshProfile();
+      fetchData();
     } catch (e: any) {
       Alert.alert('Transaction Failed', e.message || 'Could not complete top-up');
     } finally {
@@ -257,57 +265,19 @@ export default function CustomerWalletTab() {
     setIsProcessing(true);
     try {
       await withdraw(amount);
-      await refreshProfile();
-      await fetchData();
+      // Close modal and show toast immediately
       setShowWithdrawMoney(false);
       toast.show(`$${amount.toFixed(2)} withdrawn successfully`);
+      
+      // Refresh data in background
+      refreshProfile();
+      fetchData();
     } catch (e: any) {
       Alert.alert('Withdrawal Failed', e.message || 'Could not complete withdrawal');
     } finally {
       setIsProcessing(false);
     }
   }
-
-  const renderTransaction = (job: Job) => {
-    let icon = 'cash-outline';
-    let color = C.blue600;
-    let title = job.size || 'Cleaning Service';
-    let amount = Number(job.price_amount).toFixed(2);
-    let status = 'Paid';
-    let sign = '-';
-
-    if (job.status === 'CANCELLED') {
-      icon = 'refresh-outline';
-      color = C.success;
-      title = `Refund: ${title} (cancelled)`;
-      sign = '+';
-      status = 'Deposit';
-    } else if (job.status === 'OPEN' || job.status === 'IN_PROGRESS' || job.status === 'PENDING_REVIEW') {
-      icon = 'lock-closed-outline';
-      color = '#d97706';
-      title = `Escrow Held: ${title}`;
-      sign = '-';
-      status = 'Held';
-    }
-
-    return (
-      <View key={job.id} style={[st.txRow, { borderBottomColor: C.divider }]}>
-        <View style={[st.txIconContainer, { backgroundColor: job.status === 'CANCELLED' ? '#f0fdf4' : (job.status === 'COMPLETED' ? '#fef2f2' : '#fffbeb') }]}>
-          <Ionicons name={icon as any} size={18} color={color} />
-        </View>
-        <View style={st.txInfo}>
-          <Text style={[st.txTitle, { color: C.text1 }]} numberOfLines={1}>{title}</Text>
-          <Text style={[st.txDate, { color: C.text3 }]}>{new Date(job.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</Text>
-        </View>
-        <View style={st.txAmountContainer}>
-          <Text style={[st.txAmount, { color: sign === '+' ? C.success : (status === 'Held' ? '#d97706' : C.error) }]}>
-            {sign}${amount}
-          </Text>
-          <Text style={[st.txStatus, { color: C.text3 }]}>{status}</Text>
-        </View>
-      </View>
-    );
-  };
 
   return (
     <View style={[st.container, { backgroundColor: C.bg }]}>
@@ -393,13 +363,46 @@ export default function CustomerWalletTab() {
         <View style={st.section}>
           <Text style={[st.sectionTitle, { color: C.text1 }]}>Transaction History</Text>
           <View style={[st.txCard, { backgroundColor: C.surface, borderColor: C.divider }]}>
-            {recentJobs.length === 0 ? (
+            {allTransactions.length === 0 ? (
               <View style={st.emptyTx}>
                 <Ionicons name="receipt-outline" size={32} color={C.text3} />
                 <Text style={{ color: C.text3, marginTop: 8 }}>No transactions yet</Text>
               </View>
             ) : (
-              recentJobs.map(renderTransaction)
+              allTransactions.map((tx: any) => {
+                const isPositive = ['TOP_UP', 'REFUND'].includes(tx.type);
+                
+                let iconName: any = 'receipt-outline';
+                let iconColor = C.text3;
+                let bgColor = C.surface2;
+
+                if (tx.type === 'PAYMENT') { iconName = 'cash-outline'; iconColor = '#ef4444'; bgColor = '#fff1f2'; }
+                if (tx.type === 'PAYOUT') { iconName = 'arrow-up-outline'; iconColor = '#ef4444'; bgColor = '#fff1f2'; }
+                if (tx.type === 'TOP_UP') { iconName = 'add-outline'; iconColor = '#22c55e'; bgColor = '#f0fdf4'; }
+                if (tx.type === 'REFUND') { iconName = 'refresh-outline'; iconColor = '#22c55e'; bgColor = '#f0fdf4'; }
+                if (tx.type === 'WITHDRAWAL') { iconName = 'arrow-up-outline'; iconColor = '#ef4444'; bgColor = '#fff1f2'; }
+
+                return (
+                  <View key={tx.id} style={[st.txRow, { borderBottomColor: C.divider }]}>
+                    <View style={[st.txIconContainer, { backgroundColor: bgColor }]}>
+                      <Ionicons name={iconName} size={18} color={iconColor} />
+                    </View>
+                    <View style={st.txInfo}>
+                      <Text style={[st.txTitle, { color: C.text1 }]} numberOfLines={1}>
+                        {tx.description}
+                      </Text>
+                      <Text style={[st.txDate, { color: C.text3 }]}>
+                        {new Date(tx.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </Text>
+                    </View>
+                    <View style={st.txAmountContainer}>
+                      <Text style={[st.txAmount, { color: isPositive ? '#22c55e' : '#ef4444' }]}>
+                        {isPositive ? '+' : '-'}${Math.abs(Number(tx.amount)).toFixed(2)}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })
             )}
           </View>
         </View>

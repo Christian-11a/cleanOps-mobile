@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, TextInput, Modal, KeyboardAvoidingView,
@@ -6,23 +7,19 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/lib/themeContext';
 import { useToast } from '@/lib/toastContext';
-import { addMoney, withdraw } from '@/actions/payments';
+import { getBalance, withdraw, getTransactions } from '@/actions/payments';
 import { getEmployeeJobs } from '@/actions/jobs';
-import { formatTimeAgo } from '@/lib/utils';
 import { useAuth } from '@/lib/authContext';
-import { 
-  getPaymentMethods, addPaymentMethod, setDefaultPaymentMethod, removePaymentMethod,
-  getWithdrawals, addWithdrawal
-} from '@/stores/employeePaymentStore';
+import { getPaymentMethods, addPaymentMethod, setDefaultPaymentMethod, removePaymentMethod } from '@/stores/paymentStore';
 import { 
   isValidCardNumber, isValidExpiry, isValidCVC, isValidPHMobile, isValidCardholder,
   formatCardNumber, formatExpiry 
 } from '@/lib/validation';
-import type { Job, PaymentMethod, PaymentBrand, WithdrawalTransaction } from '@/types';
+import { formatTimeAgo } from '@/lib/utils';
 
 const { width } = Dimensions.get('window');
 
@@ -35,52 +32,37 @@ export default function EmployeeWalletTab() {
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [recentJobs, setRecentJobs] = useState<Job[]>([]);
-  const [withdrawals, setWithdrawals] = useState<WithdrawalTransaction[]>([]);
-  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [allTransactions, setAllTransactions] = useState<any[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   
-  const [showAddMoney, setShowAddMoney] = useState(false);
-  const [showWithdrawMoney, setShowWithdrawMoney] = useState(false);
+  const [showWithdraw, setShowWithdraw] = useState(false);
   const [showAddPayment, setShowAddPayment] = useState(false);
   const [showManagePayments, setShowManagePayments] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   
-  const [depositAmount, setDepositAmount] = useState('100');
   const [withdrawAmount, setWithdrawAmount] = useState('100');
   const [isProcessing, setIsProcessing] = useState(false);
-  
-  const [cardBrand, setCardBrand] = useState<PaymentBrand>('Visa');
-  const [cardNumber, setCardNumber] = useState('');
-  const [expiry, setExpiry] = useState('');
-  const [cvc, setCvc] = useState('');
-  const [cardholderName, setCardholderName] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [otp, setOtp] = useState('');
-  const [paymentFlow, setPaymentFlow] = useState<'details' | 'otp'>('details');
-  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const fetchData = useCallback(async () => {
     try {
-      const [jobs, methods, history] = await Promise.all([
-        getEmployeeJobs('COMPLETED'),
+      const [txs, methods] = await Promise.all([
+        getTransactions(),
         getPaymentMethods(),
-        getWithdrawals(),
       ]);
-      setRecentJobs(jobs);
+      setAllTransactions(txs);
       setPaymentMethods(methods);
-      setWithdrawals(history);
     } catch (e) {
-      if (__DEV__) console.warn('Wallet fetch error:', e);
-      toast.show('Failed to load wallet data. Pull to refresh.', 'error');
+      if (__DEV__) console.warn(e);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  useEffect(() => { 
-    fetchData(); 
-  }, [fetchData]);
+  useFocusEffect(useCallback(() => {
+    fetchData();
+    refreshProfile();
+  }, [fetchData, refreshProfile]));
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -89,145 +71,27 @@ export default function EmployeeWalletTab() {
   };
 
   const balance = profile?.money_balance ?? 0;
-  // We'll keep the pending earnings logic but fetch specifically for it if needed, 
-  // though per your instruction we focus on completed ones for history.
-  const pendingEarnings = 0; // Simplified as we are only showing completed history now
+  const defaultMethod = paymentMethods.find(m => m.isDefault);
 
-  const defaultMethod = useMemo(() => {
-    // Show cards OR wallets
-    return paymentMethods.find(m => m.isDefault) || paymentMethods[0];
-  }, [paymentMethods]);
+  async function handleWithdraw() {
+    const amount = parseFloat(withdrawAmount);
+    if (isNaN(amount) || amount <= 0) return Alert.alert('Invalid Amount', 'Please enter a valid amount');
+    if (amount > balance) return Alert.alert('Insufficient Funds', 'You cannot withdraw more than your balance');
+    if (!defaultMethod) return Alert.alert('No Payment Method', 'Please add a withdrawal method first');
 
-  const allTransactions = useMemo(() => {
-    const combined = [
-      ...recentJobs.map(j => ({ ...j, type: 'job' as const })),
-      ...withdrawals.map(w => ({ ...w, type: 'withdraw' as const })),
-    ];
-    return combined.sort((a, b) => 
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
-  }, [recentJobs, withdrawals]);
-
-  // -- Handlers --
-  function resetPaymentForm() {
-    setCardNumber('');
-    setExpiry('');
-    setCvc('');
-    setCardholderName('');
-    setPhoneNumber('');
-    setOtp('');
-    setPaymentFlow('details');
-    setErrors({});
-  }
-
-  async function handleAddPaymentMethod() {
-    const isCard = cardBrand === 'Visa' || cardBrand === 'Mastercard';
-    const newErrors: Record<string, string> = {};
-
-    if (isCard) {
-      if (!isValidCardNumber(cardNumber)) newErrors.cardNumber = 'Invalid 16-digit card number';
-      if (!isValidExpiry(expiry)) newErrors.expiry = 'Invalid or expired (MM/YY)';
-      if (!isValidCVC(cvc)) newErrors.cvc = 'Invalid CVC';
-      if (!isValidCardholder(cardholderName)) newErrors.cardholderName = 'Invalid name';
-
-      if (Object.keys(newErrors).length > 0) {
-        setErrors(newErrors);
-        return;
-      }
-
-      setIsProcessing(true);
-      try {
-        await addPaymentMethod({
-          type: 'card',
-          brand: cardBrand,
-          last4: cardNumber.replace(/\s+/g, '').slice(-4),
-          expiry,
-          cardholderName,
-        });
-        await fetchData();
-        setShowAddPayment(false);
-        resetPaymentForm();
-        toast.show(`${cardBrand} added successfully`);
-      } catch (e) {
-        Alert.alert('Error', 'Failed to add card');
-      } finally {
-        setIsProcessing(false);
-      }
-    } else {
-      // E-Wallet flow
-      if (!isValidPHMobile(phoneNumber)) {
-        setErrors({ phoneNumber: 'Must be 10 digits starting with 9' });
-        return;
-      }
-      setErrors({});
-      setIsProcessing(true);
-      // Simulate OTP step for Maya/GCash
-      setTimeout(() => {
-        setIsProcessing(false);
-        setPaymentFlow('otp');
-      }, 1500);
-    }
-  }
-
-  async function handleVerifyOtp() {
-    if (otp.length !== 6) {
-      setErrors({ otp: 'Enter 6-digit code' });
-      return;
-    }
     setIsProcessing(true);
     try {
-      // In a real app, verify OTP with Supabase/Stripe
-      await addPaymentMethod({
-        type: 'e-wallet',
-        brand: cardBrand,
-        last4: phoneNumber.slice(-4),
-        phoneNumber: phoneNumber,
-      });
-      await fetchData();
-      setShowAddPayment(false);
-      resetPaymentForm();
-      toast.show(`${cardBrand} linked successfully`);
-    } catch (e) {
-      Alert.alert('Error', 'Failed to link wallet');
+      await withdraw(amount);
+      setShowWithdraw(false);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+      refreshProfile();
+      fetchData();
+    } catch (e: any) {
+      Alert.alert('Withdrawal Failed', e.message);
     } finally {
       setIsProcessing(false);
     }
-  }
-
-  async function handleRemoveMethod(id: string) {
-    Alert.alert('Remove Method?', 'Are you sure you want to remove this payout method?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: async () => {
-        await removePaymentMethod(id);
-        await fetchData();
-        toast.show('Method removed');
-      }},
-    ]);
-  }
-
-  async function handleSetDefault(id: string) {
-    await setDefaultPaymentMethod(id);
-    await fetchData();
-    toast.show('Default payout method updated');
-  }
-
-  async function handleWithdraw() {
-    const amt = parseFloat(withdrawAmount);
-    if (isNaN(amt) || amt <= 0) return Alert.alert('Invalid', 'Enter valid amount');
-    if (amt > balance) return Alert.alert('Insufficient', 'Balance too low');
-    if (!defaultMethod) return Alert.alert('Error', 'Please add a payout method first');
-    
-    setIsProcessing(true);
-    try {
-      await withdraw(amt);
-      await addWithdrawal(amt, defaultMethod);
-      await refreshProfile();
-      await fetchData();
-      setShowWithdrawMoney(false);
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
-    } catch (e: any) { Alert.alert('Error', e.message); }
-    finally { setIsProcessing(false); }
   }
 
   return (
@@ -235,30 +99,29 @@ export default function EmployeeWalletTab() {
       <View style={st.headerContainer}>
         <LinearGradient
           colors={['#0A0F1E', '#1e293b']}
-          style={[st.balanceCard, { paddingTop: insets.top + 10 }]}
+          style={[st.header, { paddingTop: insets.top + 10 }]}
         >
           <View style={st.headerTop}>
-            <View>
-              <Text style={st.headerTitle}>Earnings Wallet</Text>
-              <Text style={st.headerSub}>Manage your payouts</Text>
-            </View>
+            <Text style={st.headerTitle}>Earnings Wallet</Text>
             <View style={st.proBadge}>
-              <Ionicons name="flash" size={12} color="#22c55e" />
+              <Ionicons name="flash" size={10} color="#22c55e" />
               <Text style={st.proText}>PRO</Text>
             </View>
           </View>
 
-          <View style={st.balanceMain}>
+          <View style={st.balanceBox}>
             <Text style={st.balanceLabel}>Available for Withdrawal</Text>
             <Text style={st.balanceValue}>${Number(balance).toFixed(2)}</Text>
           </View>
 
-          <View style={st.actionButtonsRow}>
-            <TouchableOpacity style={st.primaryBtn} onPress={() => setShowWithdrawMoney(true)}>
-              <Ionicons name="arrow-up" size={18} color="#fff" />
-              <Text style={st.btnText}>Withdraw Earnings</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity 
+            style={st.withdrawBtn} 
+            onPress={() => setShowWithdraw(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="arrow-up" size={18} color="#fff" />
+            <Text style={st.withdrawBtnText}>Withdraw Earnings</Text>
+          </TouchableOpacity>
         </LinearGradient>
       </View>
 
@@ -266,6 +129,7 @@ export default function EmployeeWalletTab() {
         style={st.content} 
         contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.blue600} />}
+        showsVerticalScrollIndicator={false}
       >
         <Text style={[st.sectionTitle, { color: C.text1 }]}>Transaction History</Text>
         <View style={[st.txCard, { backgroundColor: C.surface, borderColor: C.divider }]}>
@@ -276,27 +140,33 @@ export default function EmployeeWalletTab() {
             </View>
           ) : (
             allTransactions.map((tx: any) => {
-              const isJob = tx.type === 'job';
+              const isPositive = ['PAYOUT', 'TOP_UP', 'REFUND'].includes(tx.type);
+              
+              let iconName: any = 'receipt-outline';
+              let iconColor = C.text3;
+              let bgColor = C.surface2;
+
+              if (tx.type === 'PAYMENT') { iconName = 'cash-outline'; iconColor = '#ef4444'; bgColor = '#fff1f2'; }
+              if (tx.type === 'PAYOUT') { iconName = 'add-outline'; iconColor = '#22c55e'; bgColor = '#f0fdf4'; }
+              if (tx.type === 'TOP_UP') { iconName = 'add-outline'; iconColor = C.blue600; bgColor = isDark ? C.blue900 + '20' : '#eff6ff'; }
+              if (tx.type === 'REFUND') { iconName = 'refresh-outline'; iconColor = '#22c55e'; bgColor = '#f0fdf4'; }
+              if (tx.type === 'WITHDRAWAL') { iconName = 'arrow-up-outline'; iconColor = '#ef4444'; bgColor = '#fff1f2'; }
+
               return (
                 <View key={tx.id} style={[st.txRow, { borderBottomColor: C.divider }]}>
-                  <View style={[st.txIcon, { backgroundColor: isJob ? (tx.status === 'COMPLETED' ? '#f0fdf4' : '#f1f5f9') : '#fff1f2' }]}>
-                    <Ionicons 
-                      name={isJob ? (tx.status === 'COMPLETED' ? 'cash-outline' : 'time-outline') : 'arrow-up-outline'} 
-                      size={18} 
-                      color={isJob ? (tx.status === 'COMPLETED' ? '#22c55e' : '#64748b') : '#ef4444'} 
-                    />
+                  <View style={[st.txIcon, { backgroundColor: bgColor }]}>
+                    <Ionicons name={iconName} size={18} color={iconColor} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={[st.txTitle, { color: C.text1 }]}>
-                      {isJob ? `${tx.size || 'Cleaning'} Job` : `Payout to ${tx.method_brand}`}
+                      {tx.description}
                     </Text>
                     <Text style={[st.txDate, { color: C.text3 }]}>
-                      {isJob ? formatTimeAgo(tx.created_at) : formatTimeAgo(tx.created_at)}
-                      {!isJob && ` (**** ${tx.method_last4})`}
+                      {formatTimeAgo(tx.created_at)}
                     </Text>
                   </View>
-                  <Text style={[st.txAmt, { color: isJob ? '#22c55e' : '#ef4444' }]}>
-                    {isJob ? '+' : '-'}${(isJob ? (Number(tx.price_amount) * 0.9) : tx.amount).toFixed(2)}
+                  <Text style={[st.txAmt, { color: isPositive ? '#22c55e' : '#ef4444' }]}>
+                    {isPositive ? '+' : '-'}${Math.abs(Number(tx.amount)).toFixed(2)}
                   </Text>
                 </View>
               );
@@ -304,8 +174,8 @@ export default function EmployeeWalletTab() {
           )}
         </View>
 
-        <View style={[st.infoNote, { backgroundColor: C.surface2, borderColor: C.divider }]}>
-           <Ionicons name="information-circle" size={16} color={C.text3} />
+        <View style={[st.infoNote, { backgroundColor: isDark ? C.surface2 : '#f8fafc', borderColor: C.divider }]}>
+           <Ionicons name="information-circle" size={18} color={C.text3} />
            <Text style={[st.infoNoteText, { color: C.text3 }]}>
              Earnings are released after customer approval. A 10% platform fee applies to all jobs.
            </Text>
@@ -313,361 +183,111 @@ export default function EmployeeWalletTab() {
       </ScrollView>
 
       {/* Withdraw Modal */}
-      <Modal visible={showWithdrawMoney} animationType="slide" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={st.modalOverlay}>
-          <View style={[st.modalContent, { backgroundColor: C.surface }]}>
-            <View style={st.modalHeader}>
-              <Text style={[st.modalTitle, { color: C.text1 }]}>Withdraw Earnings</Text>
-              <TouchableOpacity onPress={() => setShowWithdrawMoney(false)}>
-                <Ionicons name="close" size={24} color={C.text3} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={st.modalBody}>
-              <Text style={[st.inputLabel, { color: C.text2 }]}>Amount to Withdraw</Text>
-              <View style={[st.amountInputWrap, { backgroundColor: C.surface2, borderColor: C.divider }]}>
-                <Text style={[st.currencySymbol, { color: C.text1 }]}>$</Text>
-                <TextInput
-                  style={[st.amountInput, { color: C.text1 }]}
-                  keyboardType="numeric"
-                  value={withdrawAmount}
-                  onChangeText={setWithdrawAmount}
-                  autoFocus
-                />
-              </View>
-              <Text style={[st.balanceNote, { color: C.text3 }]}>Available: ${balance.toFixed(2)}</Text>
-
-              {defaultMethod ? (
-                <>
-                  <Text style={[st.inputLabel, { color: C.text2, marginTop: 20 }]}>Transfer to</Text>
-                  <TouchableOpacity 
-                    style={[st.methodBtn, { backgroundColor: C.surface2, borderColor: C.divider }]}
-                    onPress={() => setShowManagePayments(true)}
-                  >
-                    <View style={[st.methodBrandIconSmall, { backgroundColor: defaultMethod.brand === 'Visa' ? '#1d4ed8' : (defaultMethod.brand === 'Mastercard' ? '#1a1a1a' : (defaultMethod.brand === 'Maya' ? '#00c300' : '#1a73e8')) }]}>
-                      <Text style={st.brandTextTiny}>{defaultMethod.brand.substring(0, 2)}</Text>
+      <Modal visible={showWithdraw} transparent animationType="slide">
+        <TouchableOpacity style={st.modalOverlay} activeOpacity={1} onPress={() => !isProcessing && setShowWithdraw(false)}>
+           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, justifyContent: 'flex-end' }}>
+              <View style={[st.modalSheet, { backgroundColor: C.surface }]} onStartShouldSetResponder={() => true}>
+                 <View style={st.modalHeader}>
+                    <Text style={[st.modalTitle, { color: C.text1 }]}>Withdraw Funds</Text>
+                    <TouchableOpacity onPress={() => setShowWithdraw(false)}>
+                       <Ionicons name="close" size={24} color={C.text1} />
+                    </TouchableOpacity>
+                 </View>
+                 
+                 <View style={st.modalBody}>
+                    <Text style={[st.inputLabel, { color: C.text3 }]}>Amount to Withdraw</Text>
+                    <View style={[st.amountInputRow, { backgroundColor: C.surface2, borderColor: C.divider }]}>
+                       <Text style={[st.currency, { color: C.text3 }]}>$</Text>
+                       <TextInput 
+                         style={[st.amountInput, { color: C.text1 }]}
+                         keyboardType="decimal-pad"
+                         value={withdrawAmount}
+                         onChangeText={setWithdrawAmount}
+                         autoFocus
+                       />
                     </View>
-                    <Text style={[st.methodText, { color: C.text1 }]}>
-                      {defaultMethod.brand} {defaultMethod.last4 ? `(**** ${defaultMethod.last4})` : (defaultMethod.phoneNumber ? `(+63 ${defaultMethod.phoneNumber.slice(-4)})` : '')}
-                    </Text>
-                    <Ionicons name="chevron-forward" size={16} color={C.text3} style={{ marginLeft: 'auto' }} />
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <TouchableOpacity 
-                  style={[st.methodBtn, { backgroundColor: C.surface2, borderColor: C.error, borderStyle: 'dashed', marginTop: 24 }]}
-                  onPress={() => setShowAddPayment(true)}
-                >
-                   <Ionicons name="add-circle-outline" size={20} color={C.error} />
-                   <Text style={[st.methodText, { color: C.error }]}>Add Payout Method</Text>
-                   <Ionicons name="chevron-forward" size={16} color={C.text3} style={{ marginLeft: 'auto' }} />
-                </TouchableOpacity>
-              )}
-            </View>
+                    <Text style={{ fontSize: 12, color: C.text3, marginTop: 4 }}>Available: ${balance.toFixed(2)}</Text>
 
-            <TouchableOpacity 
-              style={[st.withdrawConfirmBtn, { backgroundColor: (defaultMethod && !isProcessing) ? '#22c55e' : '#94a3b8' }]} 
-              onPress={handleWithdraw}
-              disabled={!defaultMethod || isProcessing}
-            >
-              {isProcessing ? <ActivityIndicator color="#fff" /> : <Text style={st.withdrawConfirmText}>Confirm Withdrawal</Text>}
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* MODAL: MANAGE PAYMENTS */}
-      <Modal visible={showManagePayments} animationType="slide" transparent>
-        <View style={st.modalOverlay}>
-          <View style={[st.modalContent, { backgroundColor: C.surface }]}>
-            <View style={st.modalHeader}>
-              <Text style={[st.modalTitle, { color: C.text1 }]}>Manage Payouts</Text>
-              <TouchableOpacity onPress={() => setShowManagePayments(false)}>
-                <Ionicons name="close" size={24} color={C.text3} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={{ maxHeight: 400 }}>
-              <View style={{ gap: 12 }}>
-                {paymentMethods.map(m => (
-                  <View key={m.id} style={[st.methodRow, { backgroundColor: C.surface2, borderColor: m.isDefault ? C.blue600 : C.divider }]}>
-                    <TouchableOpacity 
-                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 }}
-                      onPress={() => handleSetDefault(m.id)}
-                    >
-                      <View style={[st.methodBrandIconSmall, { width: 32, height: 22, backgroundColor: m.brand === 'Visa' ? '#1d4ed8' : (m.brand === 'Mastercard' ? '#1a1a1a' : (m.brand === 'Maya' ? '#00c300' : '#1a73e8')) }]}>
-                        <Text style={[st.brandTextTiny, { fontSize: 9 }]}>{m.brand.substring(0, 2)}</Text>
+                    {defaultMethod ? (
+                      <View style={[st.methodBox, { backgroundColor: C.surface2, borderColor: C.divider }]}>
+                         <Ionicons name="card" size={20} color={C.blue600} />
+                         <Text style={[st.methodText, { color: C.text1 }]}>{defaultMethod.brand} •••• {defaultMethod.last4}</Text>
                       </View>
-                      <View>
-                        <Text style={[st.methodText, { color: C.text1 }]}>
-                          {m.brand} {m.last4 ? `(**** ${m.last4})` : (m.phoneNumber ? `(+63 ${m.phoneNumber.slice(-4)})` : '')}
-                        </Text>
-                        {m.isDefault && <Text style={{ fontSize: 10, color: C.blue600, fontWeight: '700' }}>DEFAULT</Text>}
-                      </View>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleRemoveMethod(m.id)}>
-                      <Ionicons name="trash-outline" size={18} color={C.error} />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-
-                <TouchableOpacity 
-                  style={[st.methodRow, { borderStyle: 'dashed', borderColor: C.blue600, justifyContent: 'center' }]}
-                  onPress={() => { setShowManagePayments(false); setShowAddPayment(true); }}
-                >
-                  <Ionicons name="add-circle-outline" size={20} color={C.blue600} />
-                  <Text style={[st.methodText, { color: C.blue600 }]}>Add New Payout Method</Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* MODAL: ADD PAYMENT METHOD */}
-      <Modal visible={showAddPayment} animationType="slide" transparent>
-        <TouchableOpacity style={st.modalOverlay} activeOpacity={1} onPress={() => !isProcessing && setShowAddPayment(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ justifyContent: 'flex-end' }}>
-          <View style={[st.modalContent, { backgroundColor: C.surface }]} onStartShouldSetResponder={() => true}>
-            <View style={st.modalHeader}>
-              <Text style={[st.modalTitle, { color: C.text1 }]}>
-                {paymentFlow === 'otp' ? `Link ${cardBrand}` : 'Add Payout Method'}
-              </Text>
-              <TouchableOpacity onPress={() => setShowAddPayment(false)} disabled={isProcessing}>
-                <View style={[st.closeBtn, { backgroundColor: C.surface2 }]}>
-                  <Ionicons name="close" size={20} color={C.text2} />
-                </View>
-              </TouchableOpacity>
-            </View>
-
-            <View style={st.modalBody}>
-              {paymentFlow === 'details' ? (
-                <>
-                  <Text style={[st.inputLabel, { color: C.text3 }]}>Select Brand</Text>
-                  <View style={st.brandSelector}>
-                    {(['Visa', 'Mastercard', 'Maya', 'GCash'] as PaymentBrand[]).map(b => (
-                      <TouchableOpacity 
-                        key={b}
-                        style={[
-                          st.brandOption, 
-                          cardBrand === b && { borderColor: C.blue600, backgroundColor: isDark ? 'rgba(37,99,235,0.1)' : '#f0f9ff' }
-                        ]}
-                        onPress={() => { setCardBrand(b); setErrors({}); }}
-                      >
-                        <Text style={[st.brandOptionText, { color: cardBrand === b ? C.blue600 : C.text2 }]}>{b}</Text>
+                    ) : (
+                      <TouchableOpacity style={st.addMethodBtn} onPress={() => { setShowWithdraw(false); setShowManagePayments(true); }}>
+                         <Text style={{ color: C.blue600, fontWeight: '700' }}>Add Withdrawal Method</Text>
                       </TouchableOpacity>
-                    ))}
-                  </View>
+                    )}
 
-                  {cardBrand === 'Visa' || cardBrand === 'Mastercard' ? (
-                    <View style={{ marginTop: 20, gap: 16 }}>
-                      <View style={st.inputSection}>
-                        <Text style={[st.inputLabel, { color: C.text3 }]}>Cardholder Name</Text>
-                        <View style={[st.amountInputWrap, { backgroundColor: C.surface2, borderColor: errors.cardholderName ? C.error : C.divider }]}>
-                          <TextInput
-                            style={[st.amountInput, { color: C.text1, fontSize: 16 }]}
-                            placeholder="John Doe"
-                            placeholderTextColor={C.text3}
-                            value={cardholderName}
-                            onChangeText={val => { setCardholderName(val); setErrors(prev => ({ ...prev, cardholderName: '' })); }}
-                            autoCapitalize="words"
-                          />
-                        </View>
-                        {errors.cardholderName && <Text style={st.errorText}>{errors.cardholderName}</Text>}
-                      </View>
-
-                      <View style={st.inputSection}>
-                        <Text style={[st.inputLabel, { color: C.text3 }]}>Card Number</Text>
-                        <View style={[st.amountInputWrap, { backgroundColor: C.surface2, borderColor: errors.cardNumber ? C.error : C.divider }]}>
-                          <Ionicons name="card-outline" size={20} color={errors.cardNumber ? C.error : C.text3} style={{ marginRight: 8 }} />
-                          <TextInput
-                            style={[st.amountInput, { color: C.text1, fontSize: 16 }]}
-                            placeholder="4242 4242 4242 4242"
-                            placeholderTextColor={C.text3}
-                            value={formatCardNumber(cardNumber)}
-                            onChangeText={val => { setCardNumber(val.replace(/\s+/g, '')); setErrors(prev => ({ ...prev, cardNumber: '' })); }}
-                            keyboardType="number-pad"
-                            maxLength={19}
-                          />
-                        </View>
-                        {errors.cardNumber && <Text style={st.errorText}>{errors.cardNumber}</Text>}
-                      </View>
-                      <View style={{ flexDirection: 'row', gap: 12 }}>
-                        <View style={[st.inputSection, { flex: 1 }]}>
-                          <Text style={[st.inputLabel, { color: C.text3 }]}>Expiry (MM/YY)</Text>
-                          <View style={[st.amountInputWrap, { backgroundColor: C.surface2, borderColor: errors.expiry ? C.error : C.divider }]}>
-                            <TextInput
-                              style={[st.amountInput, { color: C.text1, fontSize: 16 }]}
-                              placeholder="MM/YY"
-                              placeholderTextColor={C.text3}
-                              value={formatExpiry(expiry)}
-                              onChangeText={val => { setExpiry(val); setErrors(prev => ({ ...prev, expiry: '' })); }}
-                              maxLength={5}
-                            />
-                          </View>
-                          {errors.expiry && <Text style={st.errorText}>{errors.expiry}</Text>}
-                        </View>
-                        <View style={[st.inputSection, { flex: 1 }]}>
-                          <Text style={[st.inputLabel, { color: C.text3 }]}>CVC</Text>
-                          <View style={[st.amountInputWrap, { backgroundColor: C.surface2, borderColor: errors.cvc ? C.error : C.divider }]}>
-                            <TextInput
-                              style={[st.amountInput, { color: C.text1, fontSize: 16 }]}
-                              placeholder="123"
-                              placeholderTextColor={C.text3}
-                              value={cvc}
-                              onChangeText={val => { setCvc(val); setErrors(prev => ({ ...prev, cvc: '' })); }}
-                              keyboardType="number-pad"
-                              maxLength={4}
-                              secureTextEntry
-                            />
-                          </View>
-                          {errors.cvc && <Text style={st.errorText}>{errors.cvc}</Text>}
-                        </View>
-                      </View>
-                    </View>
-                  ) : (
-                    <View style={{ marginTop: 20, gap: 16 }}>
-                      <View style={st.inputSection}>
-                        <Text style={[st.inputLabel, { color: C.text2 }]}>{cardBrand} Number</Text>
-                        <View style={[st.amountInputWrap, { backgroundColor: C.surface2, borderColor: errors.phoneNumber ? C.error : C.divider }]}>
-                          <Text style={{ fontSize: 16, fontWeight: '700', color: C.text1, marginRight: 8 }}>+63</Text>
-                          <TextInput
-                            style={[st.amountInput, { color: C.text1, fontSize: 16 }]}
-                            placeholder="917 123 4567"
-                            placeholderTextColor={C.text3}
-                            value={phoneNumber}
-                            onChangeText={val => { setPhoneNumber(val.replace(/\s+/g, '')); setErrors(prev => ({ ...prev, phoneNumber: '' })); }}
-                            keyboardType="phone-pad"
-                            maxLength={10}
-                          />
-                        </View>
-                        {errors.phoneNumber && <Text style={st.errorText}>{errors.phoneNumber}</Text>}
-                      </View>
-                    </View>
-                  )}
-
-                  <TouchableOpacity style={[st.withdrawConfirmBtn, { marginTop: 24, overflow: 'hidden' }]} onPress={handleAddPaymentMethod}>
-                    <LinearGradient colors={['#0ea5e9', '#0284c7']} style={{ flex: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' }}>
-                      {isProcessing ? <ActivityIndicator color="#fff" /> : <Text style={st.withdrawConfirmText}>{cardBrand === 'Visa' || cardBrand === 'Mastercard' ? 'Link Card' : 'Continue'}</Text>}
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <View style={{ gap: 20, alignItems: 'center' }}>
-                  <Text style={[st.modalTitle, { color: C.text1 }]}>Verify OTP</Text>
-                  <Text style={{ color: C.text3, textAlign: 'center' }}>Enter the 6-digit code sent to your mobile</Text>
-                  <View style={[st.amountInputWrap, { backgroundColor: C.surface2, borderColor: errors.otp ? C.error : C.divider }]}>
-                    <TextInput
-                      style={[st.amountInput, { color: C.text1, textAlign: 'center', letterSpacing: 8 }]}
-                      placeholder="000000"
-                      placeholderTextColor={C.text3}
-                      value={otp}
-                      onChangeText={setOtp}
-                      keyboardType="number-pad"
-                      maxLength={6}
-                    />
-                  </View>
-                  <TouchableOpacity style={[st.withdrawConfirmBtn, { width: '100%', overflow: 'hidden' }]} onPress={handleVerifyOtp}>
-                    <LinearGradient colors={['#0ea5e9', '#0284c7']} style={{ flex: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' }}>
-                      {isProcessing ? <ActivityIndicator color="#fff" /> : <Text style={st.withdrawConfirmText}>Verify & Link</Text>}
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          </View>
-        </KeyboardAvoidingView>
+                    <TouchableOpacity 
+                      style={[st.confirmBtn, { backgroundColor: '#22c55e' }, isProcessing && { opacity: 0.7 }]} 
+                      onPress={handleWithdraw}
+                      disabled={isProcessing}
+                    >
+                       {isProcessing ? <ActivityIndicator color="#fff" /> : <Text style={st.confirmBtnText}>Confirm Withdrawal</Text>}
+                    </TouchableOpacity>
+                 </View>
+              </View>
+           </KeyboardAvoidingView>
         </TouchableOpacity>
       </Modal>
 
-      {/* MODAL: SUCCESS */}
+      {/* Success Modal */}
       <Modal visible={showSuccess} transparent animationType="fade">
         <View style={st.successOverlay}>
           <View style={[st.successModal, { backgroundColor: C.surface }]}>
-            <View style={[st.successIconCircle, { backgroundColor: '#f0fdf4' }]}>
-              <Ionicons name="checkmark-circle" size={48} color="#22c55e" />
+            <View style={[st.successIconCircle, { backgroundColor: '#22c55e' }]}>
+              <Ionicons name="checkmark" size={32} color="#fff" />
             </View>
-            <Text style={[st.successTitle, { color: C.text1 }]}>Request Sent</Text>
-            <Text style={[st.successSubText, { color: C.text3 }]}>
-              Your withdrawal request is being processed. Funds should arrive in 1-3 business days.
-            </Text>
+            <Text style={[st.successTitle, { color: C.text1 }]}>Success!</Text>
+            <Text style={[st.successSubText, { color: C.text3 }]}>Your withdrawal is being processed.</Text>
           </View>
         </View>
       </Modal>
-
-      {/* Modals are kept similar to customer wallet for consistent payment flows */}
     </View>
   );
 }
 
 const st = StyleSheet.create({
   container: { flex: 1 },
-  headerContainer: { height: 280, borderBottomLeftRadius: 32, borderBottomRightRadius: 32, overflow: 'hidden' },
-  balanceCard: { flex: 1, paddingHorizontal: 20, justifyContent: 'space-between', paddingBottom: 24 },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  headerTitle: { fontSize: 20, fontWeight: '800', color: '#fff' },
-  headerSub: { fontSize: 12, color: '#94a3b8', marginTop: 2 },
-  proBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(34,197,94,0.15)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-  proText: { fontSize: 10, color: '#4ade80', fontWeight: '900' },
-  balanceMain: { marginTop: 10 },
-  balanceLabel: { fontSize: 12, fontWeight: '600', color: '#94a3b8' },
-  balanceValue: { fontSize: 44, fontWeight: '900', color: '#fff', letterSpacing: -1 },
-  pendingRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
-  pendingText: { fontSize: 13, fontWeight: '600', color: '#fde68a' },
-  actionButtonsRow: { flexDirection: 'row', gap: 12, marginTop: 12 },
-  primaryBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#22c55e', paddingVertical: 12, borderRadius: 16 },
-  secondaryBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.15)', paddingVertical: 12, borderRadius: 16 },
-  btnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
-  content: { flex: 1, padding: 16, paddingTop: 24 },
-  sectionTitle: { fontSize: 15, fontWeight: '800', marginBottom: 12 },
+  headerContainer: { height: 300, borderBottomLeftRadius: 32, borderBottomRightRadius: 32, overflow: 'hidden' },
+  header: { flex: 1, paddingHorizontal: 24, justifyContent: 'space-between', paddingBottom: 32 },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headerTitle: { fontSize: 22, fontWeight: '900', color: '#fff' },
+  proBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  proText: { fontSize: 10, fontWeight: '900', color: '#22c55e', letterSpacing: 1 },
+  balanceBox: { marginTop: 10 },
+  balanceLabel: { fontSize: 13, color: '#94a3b8', fontWeight: '600' },
+  balanceValue: { fontSize: 48, fontWeight: '900', color: '#fff', letterSpacing: -1 },
+  withdrawBtn: { height: 56, backgroundColor: '#22c55e', borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  withdrawBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  content: { flex: 1, padding: 20 },
+  sectionTitle: { fontSize: 16, fontWeight: '800', marginBottom: 16 },
   txCard: { borderRadius: 24, borderWidth: 1, overflow: 'hidden' },
   txRow: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, gap: 12 },
-  txIcon: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  txIcon: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   txTitle: { fontSize: 14, fontWeight: '700' },
   txDate: { fontSize: 12, marginTop: 2 },
-  txAmt: { fontSize: 15, fontWeight: '800' },
+  txAmt: { fontSize: 15, fontWeight: '800', marginLeft: 'auto' },
   emptyTx: { padding: 40, alignItems: 'center' },
-  infoNote: { flexDirection: 'row', padding: 16, borderRadius: 20, borderWidth: 1, marginTop: 24, gap: 10 },
-  infoNoteText: { flex: 1, fontSize: 12, lineHeight: 18 },
-
-  // Modal Styles
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, paddingBottom: 40 },
+  infoNote: { flexDirection: 'row', padding: 16, borderRadius: 20, borderWidth: 1, marginTop: 24, gap: 12, alignItems: 'center' },
+  infoNoteText: { flex: 1, fontSize: 12, lineHeight: 18, fontWeight: '500' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
+  modalSheet: { borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, paddingBottom: 40 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
-  modalTitle: { fontSize: 18, fontWeight: '800' },
-  closeBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  modalBody: { marginBottom: 32 },
-  inputLabel: { fontSize: 14, fontWeight: '700', marginBottom: 10 },
-  amountInputWrap: { flexDirection: 'row', alignItems: 'center', height: 64, borderRadius: 20, borderWidth: 1, paddingHorizontal: 20 },
-  currencySymbol: { fontSize: 24, fontWeight: '800', marginRight: 8 },
-  amountInput: { flex: 1, fontSize: 24, fontWeight: '800' },
-  balanceNote: { fontSize: 12, marginTop: 8, fontWeight: '600' },
-  methodBtn: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, borderWidth: 1, gap: 12 },
+  modalTitle: { fontSize: 20, fontWeight: '800' },
+  modalBody: { gap: 16 },
+  inputLabel: { fontSize: 13, fontWeight: '700' },
+  amountInputRow: { flexDirection: 'row', alignItems: 'center', height: 64, borderRadius: 16, borderWidth: 1, paddingHorizontal: 20 },
+  currency: { fontSize: 24, fontWeight: '700', marginRight: 8 },
+  amountInput: { flex: 1, fontSize: 28, fontWeight: '800' },
+  methodBox: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderRadius: 16, borderWidth: 1, marginTop: 8 },
   methodText: { fontSize: 14, fontWeight: '600' },
-  withdrawConfirmBtn: { height: 56, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  withdrawConfirmText: { color: '#fff', fontSize: 16, fontWeight: '800' },
-
-  // New Styles
-  methodBrandIconSmall: {
-    width: 40,
-    height: 28,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  brandTextTiny: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  brandSelector: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  brandOption: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, borderColor: '#e2e8f0' },
-  brandOptionText: { fontSize: 13, fontWeight: '600' },
-  methodRow: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, borderWidth: 1, gap: 12 },
-  inputSection: { gap: 8 },
-  errorText: { color: '#ef4444', fontSize: 11, fontWeight: '600', marginTop: 4 },
-  successOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
-  successModal: { width: width * 0.8, padding: 30, borderRadius: 32, alignItems: 'center', gap: 16 },
+  addMethodBtn: { padding: 16, alignItems: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: '#3b82f6', borderRadius: 16 },
+  confirmBtn: { height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
+  confirmBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  successOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
+  successModal: { width: width * 0.8, padding: 32, borderRadius: 32, alignItems: 'center', gap: 16 },
   successIconCircle: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
   successTitle: { fontSize: 22, fontWeight: '800' },
   successSubText: { fontSize: 14, textAlign: 'center' },

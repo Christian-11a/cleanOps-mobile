@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, RefreshControl, Dimensions,
@@ -10,8 +11,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/lib/authContext';
 import { useColors } from '@/lib/themeContext';
 import { getCustomerJobs } from '@/actions/jobs';
+import { getProfileReviews } from '@/actions/reviews';
 import { supabase } from '@/lib/supabase';
-import type { Job } from '@/types';
+import type { Job, Review } from '@/types';
 
 const { width } = Dimensions.get('window');
 
@@ -25,28 +27,37 @@ export default function CustomerProfileTab() {
   const [refreshing, setRefreshing] = useState(false);
   const [jobsCount, setJobsCount] = useState(0);
   const [reviewsCount, setReviewsCount] = useState(0);
+  const [latestReview, setLatestReview] = useState<Review & { reviewer?: { full_name: string } } | null>(null);
   const [satisfaction, setSatisfaction] = useState<string | number>('New');
 
   const fetchData = useCallback(async () => {
+    if (!profile?.id) return;
     try {
-      const jobs = await getCustomerJobs();
+      const [jobs, reviews] = await Promise.all([
+        getCustomerJobs(),
+        getProfileReviews(profile.id)
+      ]);
       setJobsCount(jobs.length);
-      
-      // Calculate real reviews
-      // For this mockup/feedback, we'll set it to 0
-      setReviewsCount(0);
-      setSatisfaction('New');
+      setReviewsCount(profile?.reviews_given || 0);
+      setLatestReview(reviews[0] || null);
+
+      const rating = profile?.rating;
+      setSatisfaction(rating ? Number(rating).toFixed(1) : 'New');
     } catch (e) {
       if (__DEV__) console.warn(e);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
-
+  }, [profile]);
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useFocusEffect(useCallback(() => {
+    fetchData();
+    refreshProfile();
+  }, [fetchData, refreshProfile]));
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -65,6 +76,7 @@ export default function CustomerProfileTab() {
 
   const menuItems: { label: string; sub: string; icon: keyof typeof Ionicons.glyphMap; color: string; route: string }[] = [
     { label: 'Edit Profile', sub: 'Update your info', icon: 'pencil-outline', color: '#0ea5e9', route: '/customer/profile/edit' },
+    { label: 'Reviews & Feedback', sub: 'Ratings you gave & received', icon: 'star-outline', color: '#fbbf24', route: '/customer/profile/reviews' },
     { label: 'Payment Methods', sub: 'Manage cards & billing', icon: 'card-outline', color: '#7c3aed', route: '/customer/profile/payments' },
     { label: 'Notifications', sub: 'Alert preferences', icon: 'notifications-outline', color: '#d97706', route: '/customer/profile/notifications' },
     { label: 'Privacy & Security', sub: 'Password & data', icon: 'shield-checkmark-outline', color: '#16a34a', route: '/customer/profile/security' },
@@ -98,9 +110,6 @@ export default function CustomerProfileTab() {
                    <Text style={st.roleText}>Customer</Text>
                 </View>
               </View>
-              <TouchableOpacity style={st.settingsIconBtn} onPress={() => router.push('/customer/profile/settings')}>
-                <Ionicons name="settings-sharp" size={18} color="#fff" opacity={0.8} />
-              </TouchableOpacity>
             </View>
 
             <View style={st.statsRow}>
@@ -115,11 +124,12 @@ export default function CustomerProfileTab() {
               </View>
               <View style={st.statDivider} />
               <View style={st.statItem}>
-                <View style={st.satWrap}>
-                  <Text style={st.statValue}>{satisfaction}</Text>
-                  {satisfaction !== 'New' && <Ionicons name="star" size={14} color="#fbbf24" style={{ marginLeft: 4, marginTop: 2 }} />}
-                </View>
-                <Text style={st.statLabel}>Satisfaction</Text>
+                <Text style={st.statValue}>
+                  {profile?.success_rate !== undefined && profile?.success_rate !== null 
+                    ? `${Math.round(profile.success_rate)}%` 
+                    : '100%'}
+                </Text>
+                <Text style={st.statLabel}>Success Rate</Text>
               </View>
             </View>
           </View>
@@ -156,21 +166,23 @@ export default function CustomerProfileTab() {
         </View>
 
         {/* Reviews Section - HIDDEN IF NO REVIEWS */}
-        {reviewsCount > 0 && (
+        {latestReview && (
           <View style={[st.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
-            <Text style={[st.cardTitle, { color: C.text1 }]}>Your Reviews</Text>
+            <Text style={[st.cardTitle, { color: C.text1 }]}>Latest Review</Text>
             <View style={st.reviewItem}>
               <View style={[st.reviewAvatar, { backgroundColor: C.blue600 }]}>
-                <Text style={st.reviewAvatarText}>MR</Text>
+                <Text style={st.reviewAvatarText}>{(latestReview.reviewer?.full_name ?? 'C')[0].toUpperCase()}</Text>
               </View>
               <View style={{ flex: 1 }}>
                 <View style={st.reviewHeader}>
-                  <Text style={[st.reviewerName, { color: C.text1 }]}>Marcus Rivera</Text>
+                  <Text style={[st.reviewerName, { color: C.text1 }]}>{latestReview.reviewer?.full_name || 'Customer'}</Text>
                   <View style={st.ratingRow}>
-                    {[1,2,3,4,5].map(i => <Ionicons key={i} name="star" size={10} color="#fbbf24" />)}
+                    {[1,2,3,4,5].map(i => (
+                      <Ionicons key={i} name="star" size={10} color={latestReview.rating >= i ? '#fbbf24' : C.divider} />
+                    ))}
                   </View>
                 </View>
-                <Text style={[st.reviewText, { color: C.text3 }]}>"Great job! Very thorough."</Text>
+                {latestReview.comment && <Text style={[st.reviewText, { color: C.text3 }]}>"{latestReview.comment}"</Text>}
               </View>
             </View>
           </View>

@@ -53,13 +53,13 @@ export function isStrictAddress(address: string): boolean {
 }
 
 /**
- * Validates distance is within a reasonable service range (e.g., 500km)
+ * Validates distance is within a realistic service range (max 100km).
  * Allows empty string for optional radius.
  */
 export function isValidDistance(distance: string): boolean {
   if (!distance || distance.trim() === '') return true;
   const d = parseFloat(distance);
-  return !isNaN(d) && d >= 0.1 && d <= 500.0;
+  return !isNaN(d) && d >= 0.1 && d <= 100.0;
 }
 
 /**

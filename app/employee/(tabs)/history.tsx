@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   RefreshControl, ActivityIndicator, ScrollView, StatusBar
@@ -16,7 +17,7 @@ import type { Job } from '@/types';
 export default function EmployeeHistoryScreen() {
   const router = useRouter();
   const { colors: C, isDark } = useTheme();
-  const { profile } = useAuth();
+  const { profile, refreshProfile } = useAuth();
   const insets = useSafeAreaInsets();
   
   const [jobs,       setJobs]       = useState<Job[]>([]);
@@ -32,6 +33,11 @@ export default function EmployeeHistoryScreen() {
   }, []);
 
   useEffect(() => { fetchJobs(); }, [fetchJobs]);
+
+  useFocusEffect(useCallback(() => {
+    fetchJobs();
+    refreshProfile();
+  }, [fetchJobs, refreshProfile]));
 
   // -- Dynamic Stats --
   const completedJobs = useMemo(() => jobs.filter(j => j.status === 'COMPLETED'), [jobs]);
@@ -53,9 +59,6 @@ export default function EmployeeHistoryScreen() {
     <View>
       <LinearGradient colors={['#0A0F1E', '#1e293b']} style={[st.header, { paddingTop: insets.top + 12 }]}>
         <View style={st.headerTop}>
-          <TouchableOpacity style={st.backBtn} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={20} color="#fff" />
-          </TouchableOpacity>
           <View>
             <Text style={st.headerTitle}>Earnings & History</Text>
             <Text style={st.headerSub}>{stats.count} jobs completed</Text>
@@ -131,7 +134,7 @@ export default function EmployeeHistoryScreen() {
       >
         <View style={st.cardHeader}>
            <View style={{ flex: 1 }}>
-              <Text style={[st.jobTitle, { color: C.text1 }]}>{item.size || 'Home'} Cleaning</Text>
+              <Text style={[st.jobTitle, { color: C.text1 }]}>{item.title || (item.size ? `${item.size} Clean` : 'Home Cleaning')}</Text>
               <View style={st.jobSub}>
                  <Ionicons name="location-outline" size={10} color={C.text3} />
                  <Text style={[st.jobLoc, { color: C.text3 }]} numberOfLines={1}>{item.location_address}</Text>

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   RefreshControl, ActivityIndicator, Alert, ScrollView, Dimensions, Platform
@@ -14,6 +15,7 @@ import { useAuth } from '@/lib/authContext';
 import { useToast } from '@/lib/toastContext';
 import { useNotifications } from '@/lib/notificationContext';
 import { formatTimeAgo, calculateDistance } from '@/lib/utils';
+import { JobCardSkeleton } from '@/components/shared/SkeletonLoader';
 import type { Job } from '@/types';
 import * as Location from 'expo-location';
 
@@ -39,30 +41,30 @@ export default function EmployeeFeedScreen() {
   const [locStatus,      setLocStatus]      = useState<Location.PermissionStatus | null>(null);
 
   const fetchJobs = useCallback(async () => {
-    try { 
-      // Get user location for distance calculation
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      setLocStatus(status);
-      if (status === 'granted') {
-        const loc = await Location.getCurrentPositionAsync({});
-        setUserLoc({ lat: loc.coords.latitude, lng: loc.coords.longitude });
-      }
-
-      // Fetch open jobs and user's applications in parallel
+    try {
       const [allOpen, appliedIds] = await Promise.all([
         getOpenJobs(),
         getEmployeeApplications()
       ]);
-
-      setJobs(allOpen); 
+      setJobs(allOpen);
       setAppliedJobIds(appliedIds);
     }
     catch (e) { if (__DEV__) console.warn(e); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
-  useEffect(() => { fetchJobs(); }, [fetchJobs]);
+  // GPS fetched in background — never blocks the job list
+  useEffect(() => {
+    Location.requestForegroundPermissionsAsync().then(({ status }) => {
+      setLocStatus(status);
+      if (status !== 'granted') return;
+      Location.getCurrentPositionAsync({}).then(loc => {
+        setUserLoc({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+      }).catch(() => {});
+    });
+  }, []);
 
+  useFocusEffect(useCallback(() => { fetchJobs(); }, [fetchJobs]));
   const firstName = profile?.full_name?.split(' ')[0] ?? 'Cleaner';
   
   const filteredJobs = useMemo(() => {
@@ -217,10 +219,10 @@ export default function EmployeeFeedScreen() {
     const priorityBg = isUrgent ? '#fee2e2' : (item.urgency === 'NORMAL' ? '#fef3c7' : '#dcfce7');
     const priorityText = isUrgent ? '#b91c1c' : (item.urgency === 'NORMAL' ? '#92400e' : '#166534');
 
-    const jobTitle = item.size ? `${item.size} Clean` : 'Home Cleaning';
+    const jobTitle = item.title || (item.size ? `${item.size} Clean` : 'Home Cleaning');
 
     // Calculate real distance if we have both coordinates
-    let displayDistance = item.distance?.toFixed(1) ?? '0.4';
+    let displayDistance = item.distance != null ? item.distance.toFixed(1) : '--';
     if (userLoc && item.location_lat && item.location_lng) {
       const dist = calculateDistance(userLoc.lat, userLoc.lng, item.location_lat, item.location_lng);
       displayDistance = dist.toFixed(1);
@@ -277,10 +279,19 @@ export default function EmployeeFeedScreen() {
   return (
     <View style={[st.safe, { backgroundColor: C.bg }]}>
       <FlatList
-        data={filteredJobs}
+        data={loading && !refreshing ? [] : filteredJobs}
         keyExtractor={(item) => item.id}
         renderItem={renderJobItem}
-        ListHeaderComponent={renderHeader}
+        ListHeaderComponent={
+          <>
+            {renderHeader()}
+            {loading && !refreshing && (
+              <View style={{ paddingHorizontal: 16, gap: 10 }}>
+                {[1, 2, 3, 4].map(i => <JobCardSkeleton key={i} />)}
+              </View>
+            )}
+          </>
+        }
         contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
         showsVerticalScrollIndicator={false}
         refreshControl={

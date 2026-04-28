@@ -28,6 +28,8 @@ export interface Profile {
   onboarding_completed?: boolean;
   rating?: number;
   total_jobs?: number;
+  reviews_given?: number;
+  is_banned?: boolean;
   settings: {
     pushNotifications: boolean;
     emailUpdates: boolean;
@@ -39,6 +41,15 @@ export interface Profile {
   location_address?: string;
   location_lat?: number;
   location_lng?: number;
+  created_at: string;
+}
+
+export interface Transaction {
+  id: string;
+  user_id: string;
+  type: 'REFUND' | 'PAYMENT' | 'PAYOUT' | 'TOP_UP';
+  amount: number;
+  payload?: Record<string, any>;
   created_at: string;
 }
 
@@ -58,6 +69,7 @@ export interface Job {
   urgency: JobUrgency;
   size?: string;
   tasks: string[];
+  tasks_completed_count?: number;
   location_address: string;
   location_lat?: number;
   location_lng?: number;
@@ -70,6 +82,7 @@ export interface Job {
   employee_name?: string;
   employee_phone?: string;
   custom_instructions?: string;
+  title?: string;
   created_at: string;
   updated_at?: string;
 }
@@ -92,4 +105,26 @@ export interface Message {
   profiles?: {
     full_name: string;
   };
+}
+
+export interface Review {
+  id: string;
+  job_id: string;
+  reviewer_id: string;
+  reviewee_id: string;
+  rating: number;
+  comment?: string;
+  created_at: string;
+}
+
+export interface Dispute {
+  id: string;
+  job_id: string;
+  reporter_id: string;
+  reported_id: string;
+  reason: string;
+  description: string;
+  status: 'OPEN' | 'RESOLVED' | 'DISMISSED';
+  evidence_urls?: string[];
+  created_at: string;
 }

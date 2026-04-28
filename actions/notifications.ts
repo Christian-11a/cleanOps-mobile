@@ -35,6 +35,32 @@ export async function markAllNotificationsRead(): Promise<void> {
     .eq('is_read', false);
 }
 
+export async function markNotificationRead(id: string): Promise<void> {
+  await (supabase as any)
+    .from('notifications')
+    .update({ is_read: true })
+    .eq('id', id);
+}
+
+export async function deleteNotification(id: string): Promise<void> {
+  const { error } = await (supabase as any)
+    .from('notifications')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function clearAllNotifications(): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { error } = await (supabase as any)
+    .from('notifications')
+    .delete()
+    .eq('user_id', user.id);
+  if (error) throw error;
+}
+
 // Map a DB notification type + payload to display-ready content
 export function formatNotification(n: DBNotification): {
   title: string;
@@ -50,11 +76,23 @@ export function formatNotification(n: DBNotification): {
         desc: `$${Number(p.amount ?? 0).toFixed(2)} was added to your wallet.`,
         icon: '💰', color: '#16a34a',
       };
+    case 'refund':
+      return {
+        title: 'Money Refunded 🔄',
+        desc: p.description || `A refund of $${Number(p.amount ?? 0).toFixed(2)} was credited to your wallet.`,
+        icon: '🔄', color: '#16a34a',
+      };
     case 'job_claimed':
       return {
-        title: 'Cleaner Applied 🏃',
-        desc: 'A cleaner applied to your job. Review and approve them.',
-        icon: '🏃', color: '#0284c7',
+        title: 'Cleaner Interested 🤝',
+        desc: `${p.applicant_name || 'A cleaner'} has applied to your job.`,
+        icon: '🤝', color: '#0ea5e9',
+      };
+    case 'proof_submitted':
+      return {
+        title: 'Job Done! ✨',
+        desc: `${p.worker_name || 'Your cleaner'} has finished and sent photos.`,
+        icon: '✨', color: '#16a34a',
       };
     case 'cleaner_approved':
       return {
@@ -80,10 +118,24 @@ export function formatNotification(n: DBNotification): {
         desc: `$${Number(p.amount ?? 0).toFixed(2)} deposited to your wallet.`,
         icon: '💰', color: '#16a34a',
       };
+    case 'withdrawal':
+    case 'money_withdrawn':
+      return {
+        title: 'Withdrawal Processed 🏦',
+        desc: `$${Number(p.amount ?? 0).toFixed(2)} was removed from your wallet.`,
+        icon: '🏦', color: '#f59e0b',
+      };
+    case 'new_review':
+      const stars = p.rating ? '⭐'.repeat(p.rating) : '⭐';
+      return {
+        title: 'New Rating Received ⭐',
+        desc: `${p.reviewer_name || 'A customer'} gave you ${stars}`,
+        icon: '⭐', color: '#fbbf24',
+      };
     default:
       return {
         title: 'Notification',
-        desc: JSON.stringify(p),
+        desc: p.message || 'You have a new update.',
         icon: '🔔', color: '#64748b',
       };
   }

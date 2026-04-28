@@ -75,7 +75,7 @@ export default function AvailabilityScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={st.scroll}>
+      <ScrollView contentContainerStyle={[st.scroll, { paddingBottom: insets.bottom + 40 }]}>
         <Text style={[st.sectionTitle, { color: C.text1 }]}>Weekly Schedule</Text>
         <Text style={[st.sectionSub, { color: C.text3 }]}>Select the days you are available to accept cleaning jobs.</Text>
         

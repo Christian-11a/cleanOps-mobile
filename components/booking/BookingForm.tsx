@@ -38,6 +38,7 @@ export function BookingForm() {
   const [cleanType, setCleanType] = useState<string>('regular');
   const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
   const [urgency, setUrgency] = useState<JobUrgency>('LOW');
+  const [jobTitle, setJobTitle] = useState('');
   const [address, setAddress] = useState(profile?.location_address ?? '');
   const [distance, setDistance] = useState('');
   const [coords, setCoords] = useState<{lat: number, lng: number} | null>(null);
@@ -111,6 +112,26 @@ export function BookingForm() {
     }
   }
 
+  async function handleTakePhoto() {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Allow camera access to take pictures.');
+      return;
+    }
+    setIsPickingMedia(true);
+    try {
+      const res = await ImagePicker.launchCameraAsync({
+        quality: 0.7,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      });
+      if (!res.canceled) {
+        setMediaUris(prev => [...prev, ...res.assets.map(a => a.uri)]);
+      }
+    } finally {
+      setIsPickingMedia(false);
+    }
+  }
+
   // -- Handlers --
   async function handleUseCurrentLocation() {
     setIsLocating(true);
@@ -160,6 +181,10 @@ export function BookingForm() {
 
   function goNext() {
     if (step === 'type') {
+      if (!jobTitle.trim()) {
+        Alert.alert('Job Name Required', 'Please give this booking a name (e.g., House Deep Clean) before continuing.');
+        return;
+      }
       if (cleanType === 'deep') {
         setStep('instructions');
         return;
@@ -351,6 +376,7 @@ export function BookingForm() {
         price,
         size: CLEAN_TYPES.find(t => t.id === cleanType)?.label || 'Regular',
         customInstructions: notes.trim(),
+        title: jobTitle.trim() || undefined,
       });
 
       await refreshProfile();
@@ -438,6 +464,16 @@ export function BookingForm() {
           <View style={st.stepContainer}>
             <Text style={[st.stepTitle, { color: C.text1 }]}>What type of clean?</Text>
             <Text style={[st.stepSub, { color: C.text3 }]}>Choose the service you need</Text>
+            
+            <Text style={[st.sectionLabel, { color: C.text3, marginBottom: 8 }]}>JOB NAME (E.G. KITCHEN DEEP CLEAN)</Text>
+            <TextInput
+              style={[st.textInputCard, { backgroundColor: C.surface, borderColor: C.divider, color: C.text1 }]}
+              placeholder="Give this booking a name..."
+              placeholderTextColor={C.text3}
+              value={jobTitle}
+              onChangeText={setJobTitle}
+            />
+
             <View style={st.grid}>
               {CLEAN_TYPES.map(type => (
                 <TouchableOpacity
@@ -505,12 +541,22 @@ export function BookingForm() {
               ))}
               <TouchableOpacity
                 style={[st.addMediaBtn, { backgroundColor: C.surface, borderColor: C.divider }]}
-                onPress={handlePickMedia}
+                onPress={handleTakePhoto}
                 disabled={isPickingMedia}
               >
                 <Ionicons name="camera-outline" size={24} color={C.text3} />
                 <Text style={{ color: C.text3, fontSize: 10, marginTop: 4 }}>
-                  {isPickingMedia ? '...' : 'Add Media'}
+                  {isPickingMedia ? '...' : 'Take Photo'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[st.addMediaBtn, { backgroundColor: C.surface, borderColor: C.divider }]}
+                onPress={handlePickMedia}
+                disabled={isPickingMedia}
+              >
+                <Ionicons name="image-outline" size={24} color={C.text3} />
+                <Text style={{ color: C.text3, fontSize: 10, marginTop: 4 }}>
+                  {isPickingMedia ? '...' : 'Gallery'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -890,6 +936,7 @@ const st = StyleSheet.create({
   inputRow: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 16, borderWidth: 1, marginBottom: 16 },
   inputIcon: { marginRight: 10 },
   textInput: { flex: 1, fontSize: 14 },
+  textInputCard: { height: 50, borderRadius: 16, borderWidth: 1, paddingHorizontal: 16, fontSize: 14, marginBottom: 20 },
   inputSection: { marginBottom: 20 },
   helperText: { fontSize: 12, marginTop: 4, lineHeight: 18 },
   otpIconCircle: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', alignSelf: 'center', marginBottom: 16 },

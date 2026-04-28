@@ -88,7 +88,7 @@ export default function ServiceAreaScreen() {
           <View style={{ width: 40 }} />
         </View>
 
-        <ScrollView contentContainerStyle={st.scroll}>
+        <ScrollView contentContainerStyle={[st.scroll, { paddingBottom: insets.bottom + 40 }]}>
           <View style={[st.infoCard, { backgroundColor: 'rgba(34, 197, 94, 0.1)', borderColor: 'rgba(34, 197, 94, 0.2)' }]}>
              <Ionicons name="navigate-circle" size={24} color="#22c55e" />
              <Text style={[st.infoText, { color: C.text1 }]}>
