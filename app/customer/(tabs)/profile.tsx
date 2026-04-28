@@ -76,7 +76,7 @@ export default function CustomerProfileTab() {
 
   const menuItems: { label: string; sub: string; icon: keyof typeof Ionicons.glyphMap; color: string; route: string }[] = [
     { label: 'Edit Profile', sub: 'Update your info', icon: 'pencil-outline', color: '#0ea5e9', route: '/customer/profile/edit' },
-    { label: 'Reviews & Feedback', sub: 'Ratings you gave & received', icon: 'star-outline', color: '#fbbf24', route: '/customer/profile/reviews' },
+    { label: 'Ratings You Gave', sub: 'Reviews left for cleaners', icon: 'star-outline', color: '#fbbf24', route: '/customer/profile/reviews' },
     { label: 'Payment Methods', sub: 'Manage cards & billing', icon: 'card-outline', color: '#7c3aed', route: '/customer/profile/payments' },
     { label: 'Notifications', sub: 'Alert preferences', icon: 'notifications-outline', color: '#d97706', route: '/customer/profile/notifications' },
     { label: 'Privacy & Security', sub: 'Password & data', icon: 'shield-checkmark-outline', color: '#16a34a', route: '/customer/profile/security' },

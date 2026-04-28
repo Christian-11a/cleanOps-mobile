@@ -1,5 +1,6 @@
 // Mobile equivalent of actions/jobs.ts
 import { supabase } from '@/lib/supabase';
+import { getPlatformFee } from './config';
 import type { Job, JobStatus, JobUrgency } from '@/types';
 
 // Helper to parse tasks from JSONB (can be string[] or {name:string}[])
@@ -396,8 +397,10 @@ export async function approveJobCompletion(jobId: string): Promise<void> {
 
   if (!job || (job as any).customer_id !== user.id) throw new Error('Forbidden');
 
-  // 10% platform fee — consistent with what's shown throughout the UI
-  const platformFee = Math.round((job as any).price_amount * 0.10);
+  // Fetch dynamic fee from platform_config (Single Source of Truth)
+  const feePct = await getPlatformFee();
+  const platformFee = Math.round((job as any).price_amount * (feePct / 100));
+
   const { error: escrowError } = await (supabase as any).rpc('release_escrow', {
     p_job_id: jobId,
     p_employee_id: (job as any).worker_id,

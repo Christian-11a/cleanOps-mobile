@@ -79,6 +79,12 @@ export function BookingForm() {
   }, [cleanType]);
 
   useEffect(() => {
+    if (step === 'location' && !coords && !isLocating) {
+      handleUseCurrentLocation();
+    }
+  }, [step]);
+
+  useEffect(() => {
     loadPaymentMethods();
   }, []);
 
@@ -353,6 +359,30 @@ export function BookingForm() {
     }
 
     setLoading(true);
+
+    // -- EMERGENCY LAST-SECOND GPS CHECK --
+    // If we reach this stage and coords are still null, try one quick silent fetch
+    let finalCoords = coords;
+    if (!finalCoords) {
+      try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status === 'granted') {
+          // Quick fetch with 2s timeout so we don't hang the UI
+          const loc = await Promise.race([
+            Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+            new Promise<null>((_, reject) => setTimeout(() => reject('timeout'), 2000))
+          ]) as Location.LocationObject;
+          
+          if (loc) {
+            finalCoords = { lat: loc.coords.latitude, lng: loc.coords.longitude };
+            setCoords(finalCoords); // Save to state too
+          }
+        }
+      } catch (e) {
+        if (__DEV__) console.warn('Silent GPS fallback failed or timed out:', e);
+      }
+    }
+
     try {
       const currentBalance = await getBalance();
       if (currentBalance < priceInDollars) {
@@ -371,8 +401,8 @@ export function BookingForm() {
         urgency,
         address: address.trim(),
         distance: parsedDist,
-        latitude: coords?.lat,
-        longitude: coords?.lng,
+        latitude: finalCoords?.lat,
+        longitude: finalCoords?.lng,
         price,
         size: CLEAN_TYPES.find(t => t.id === cleanType)?.label || 'Regular',
         customInstructions: notes.trim(),

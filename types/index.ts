@@ -29,6 +29,7 @@ export interface Profile {
   rating?: number;
   total_jobs?: number;
   reviews_given?: number;
+  success_rate?: number;
   is_banned?: boolean;
   settings: {
     pushNotifications: boolean;

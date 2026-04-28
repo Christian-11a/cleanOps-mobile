@@ -70,6 +70,12 @@ export function formatNotification(n: DBNotification): {
 } {
   const p = n.payload ?? {};
   switch (n.type) {
+    case 'job_posted':
+      return {
+        title: 'Job Posted! 🚀',
+        desc: `"${p.title || 'Your job'}" is now live. $${Number(p.amount ?? 0).toFixed(2)} is held in escrow.`,
+        icon: '🚀', color: '#0ea5e9',
+      };
     case 'money_added':
       return {
         title: 'Money Added 💰',
