@@ -320,7 +320,7 @@ export default function CustomerJobDetailScreen() {
             <Ionicons name="arrow-back" size={20} color="#fff" />
           </TouchableOpacity>
           <View style={st.headerTextWrap}>
-            <Text style={st.headerTitle} numberOfLines={1}>{job.tasks?.[0] || 'Regular Clean'}</Text>
+            <Text style={st.headerTitle} numberOfLines={1}>{job.title || job.tasks?.[0] || 'Regular Clean'}</Text>
             <View style={[st.statusPill, { backgroundColor: SC[job.status]?.bg || '#dbeafe' }]}>
                <Text style={[st.statusPillText, { color: SC[job.status]?.text || '#1d4ed8' }]}>{SC[job.status]?.label || 'Open'}</Text>
             </View>

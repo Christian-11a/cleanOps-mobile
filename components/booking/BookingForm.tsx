@@ -79,7 +79,7 @@ export function BookingForm() {
   }, [cleanType]);
 
   useEffect(() => {
-    if (step === 'location' && !coords && !isLocating) {
+    if (step === 'location' && !coords && !isLocating && !address) {
       handleUseCurrentLocation();
     }
   }, [step]);

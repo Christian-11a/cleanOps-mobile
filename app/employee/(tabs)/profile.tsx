@@ -134,7 +134,8 @@ export default function EmployeeProfileScreen() {
                         ? new Date(profile.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
                         : 'March 2026'}
                     </Text>
-                 </View>              </View>
+                 </View>
+              </View>
            </View>
 
            {/* Settings List */}

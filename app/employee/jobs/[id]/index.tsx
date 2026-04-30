@@ -12,6 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { getJob, applyForJob, updateJobStatus, uploadProofImage, hasEmployeeAppliedToJob } from '@/actions/jobs';
 import { getPlatformFee } from '@/actions/config';
 import { submitDispute } from '@/actions/disputes';
+import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/themeContext';
 import { useToast } from '@/lib/toastContext';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -84,17 +85,20 @@ export default function EmployeeJobDetailScreen() {
     return () => sub.remove();
   }, [showChat]);
 
+  const [applicationStatus, setApplicationStatus] = useState<string | null>(null);
+
   const fetchJob = async () => {
     try {
-      // 1. Fetch only essential data (Job info + specific applied check + platform fee)
-      const [data, alreadyApplied, feeVal] = await Promise.all([
+      // 1. Fetch job info + specific application details
+      const [data, appData, feeVal] = await Promise.all([
         getJob(id),
-        hasEmployeeAppliedToJob(id),
+        (supabase as any).from('job_applications').select('status').eq('job_id', id).eq('employee_id', user?.id).maybeSingle(),
         getPlatformFee()
       ]);
 
       setJob(data);
-      setHasApplied(alreadyApplied);
+      setHasApplied(!!appData.data);
+      setApplicationStatus(appData.data?.status || null);
       setFee(feeVal);
 
       if (data.status === 'PENDING_REVIEW' || data.status === 'COMPLETED') {
@@ -305,6 +309,35 @@ export default function EmployeeJobDetailScreen() {
     );
   }
 
+  const handleDownloadTask = async () => {
+    if (!job) return;
+    const taskDetails = `
+⚠️ CLEANOPS EMERGENCY OFFLINE ACCESS
+Save this to your Notes or Files in case you lose internet connectivity.
+
+Job: ${job.title || `${job.size || 'Home'} Cleaning`}
+Address: ${job.location_address}
+Total Pay: $${job.price_amount.toFixed(2)}
+
+Tasks to Complete:
+${job.tasks.map((t, i) => `- [ ] ${t}`).join('\n')}
+
+Special Instructions:
+${job.custom_instructions || 'None'}
+
+Generated on: ${new Date().toLocaleString()}
+    `.trim();
+
+    try {
+      await Share.share({
+        title: 'Task Details',
+        message: taskDetails,
+      });
+    } catch (error) {
+      if (__DEV__) console.error('Error sharing task details:', error);
+    }
+  };
+
   return (
     <View style={[st.safe, { backgroundColor: C.bg }]}>
       <StatusBar barStyle="light-content" />
@@ -320,8 +353,8 @@ export default function EmployeeJobDetailScreen() {
                <Ionicons name={theme.icon as any} size={14} color="#fff" />
                <Text style={st.urgencyText}>{theme.label}</Text>
             </View>
-            <TouchableOpacity style={st.shareBtn} onPress={() => Alert.alert('Download Task Info', 'The task summary and address are being generated as a PDF...')}>
-              <Ionicons name="download-outline" size={20} color="#fff" />
+            <TouchableOpacity style={st.shareBtn} onPress={handleDownloadTask}>
+              <Ionicons name="share-outline" size={20} color="#fff" />
             </TouchableOpacity>
           </View>
 
@@ -341,10 +374,16 @@ export default function EmployeeJobDetailScreen() {
 
         <View style={st.content}>
            {/* Dynamic Status Banner */}
-           {isApplied && (
+           {isApplied && applicationStatus === 'PENDING' && (
              <View style={[st.statusBanner, { backgroundColor: '#e0f2fe', borderColor: '#7dd3fc' }]}>
                 <Ionicons name="time" size={18} color="#0369a1" />
                 <Text style={[st.statusBannerText, { color: '#0369a1' }]}>Application Pending Approval</Text>
+             </View>
+           )}
+           {applicationStatus === 'REJECTED' && (
+             <View style={[st.statusBanner, { backgroundColor: '#fee2e2', borderColor: '#fecaca' }]}>
+                <Ionicons name="close-circle" size={18} color="#dc2626" />
+                <Text style={[st.statusBannerText, { color: '#dc2626' }]}>Application Declined</Text>
              </View>
            )}
 
@@ -521,6 +560,11 @@ export default function EmployeeJobDetailScreen() {
             <TouchableOpacity style={[st.applyBtn, { backgroundColor: '#111827' }]} onPress={handleApply} disabled={applying}>
               {applying ? <ActivityIndicator color="#fff" /> : <><Text style={st.applyBtnText}>Apply for this Task</Text><Ionicons name="arrow-forward" size={18} color="#fff" /></>}
             </TouchableOpacity>
+         ) : applicationStatus === 'REJECTED' ? (
+            <View style={[st.appliedBtn, { backgroundColor: '#fee2e2', borderColor: '#fca5a5' }]}>
+               <Ionicons name="close-circle" size={20} color="#dc2626" />
+               <Text style={[st.appliedText, { color: '#dc2626' }]}>Application Declined</Text>
+            </View>
          ) : isApplied ? (
             <View style={[st.appliedBtn, { backgroundColor: C.surface2, borderColor: C.divider }]}>
                <Ionicons name="time" size={20} color={C.blue600} />
