@@ -1,80 +1,74 @@
-# CleanOps Mobile App
+# CleanOps Mobile
 
-React Native / Expo mobile app for the CleanOps cleaning services marketplace.  
-Sits alongside the `frontend/` folder — both share the same Supabase backend.
+A production-ready React Native mobile application for the CleanOps cleaning services marketplace, built with **Expo** and **Supabase**. This app provides dedicated interfaces for Customers, Employees, and Administrators to manage cleaning jobs in real-time.
 
-## Folder Structure
+## 🚀 Tech Stack
 
-```
-mobile-app/
-├── actions/                      # Supabase calls (mirrors web app/actions/)
-│   ├── auth.ts
-│   ├── jobs.ts
-│   ├── messages.ts
-│   └── payments.ts
-├── app/                          # Screens (mirrors web app/ structure)
-│   ├── _layout.tsx               # Root layout + auth guard
-│   ├── index.tsx                 # Redirect to homepage
-│   ├── homepage/index.tsx        # Welcome / landing screen
-│   ├── login/index.tsx           # Sign in
-│   ├── signup/index.tsx          # Register (customer or employee)
-│   ├── customer/
-│   │   ├── dashboard/index.tsx   # Customer home
-│   │   ├── order/index.tsx       # 4-step booking form
-│   │   ├── requests/index.tsx    # All jobs with filters
-│   │   ├── payment/index.tsx     # Payment history & balance
-│   │   └── jobs/[id]/index.tsx   # Job detail + approve
-│   ├── employee/
-│   │   ├── dashboard/index.tsx   # Employee home + earnings
-│   │   ├── feed/index.tsx        # Browse & claim open jobs
-│   │   ├── history/index.tsx     # My jobs + mark-as-done
-│   │   └── jobs/[id]/index.tsx   # Job detail + claim + chat
-│   └── admin/
-│       └── dashboard/index.tsx   # Admin manage all jobs
-├── components/                   # Mirrors web components/ structure
-│   ├── booking/BookingForm.tsx
-│   ├── chat/ChatWindow.tsx
-│   ├── dashboard/
-│   │   ├── QuickStatsRow.tsx
-│   │   └── RecentActivityFeed.tsx
-│   ├── home/
-│   │   ├── FeatureHighlights.tsx
-│   │   └── CTABanner.tsx
-│   └── shared/
-│       ├── JobCard.tsx
-│       ├── StatusBadge.tsx
-│       ├── StatCard.tsx
-│       └── LoadingScreen.tsx
-├── lib/
-│   ├── supabase.ts               # Supabase client (same project as web)
-│   └── authContext.tsx           # Auth state + role detection
-├── stores/
-│   └── bookingStore.ts           # Booking form constants & price logic
-├── types/index.ts                # TypeScript types (matches web types)
-├── constants/colors.ts           # Color tokens matching web theme
-└── assets/                       # App icons & splash screen
+- **Framework:** [Expo](https://expo.dev/) (React Native)
+- **Routing:** [Expo Router](https://docs.expo.dev/router/introduction/) (File-based navigation)
+- **Backend:** [Supabase](https://supabase.com/) (Auth, Database, Real-time)
+- **State Management:** [Zustand](https://github.com/pmndrs/zustand) (Stores)
+- **Styling:** React Native StyleSheet (Theme-aware)
+
+## 📂 Project Structure
+
+```text
+cleanOps-mobile/
+├── actions/              # Supabase API calls & business logic
+│   ├── auth.ts           # Authentication & Session management
+│   ├── jobs.ts           # Job lifecycle (create, claim, complete)
+│   ├── payments.ts       # Wallet & Transaction processing
+│   └── ...               # Disputes, Reviews, Notifications, etc.
+├── app/                  # File-based Routing (Expo Router)
+│   ├── (tabs)/           # Shared Tab Navigation
+│   ├── customer/         # Customer-specific screens & workflows
+│   ├── employee/         # Employee-specific screens & workflows
+│   ├── admin/            # Administrative dashboard
+│   └── (auth)/           # Login & Signup flows
+├── components/           # Reusable UI Components
+│   ├── shared/           # Cross-app components (JobCard, StatCard)
+│   ├── booking/          # Multi-step booking forms
+│   └── chat/             # Real-time messaging interface
+├── lib/                  # Core Utilities & Contexts
+│   ├── supabase.ts       # Supabase client configuration
+│   ├── authContext.tsx   # Global Auth & Role state
+│   ├── themeContext.tsx  # Dynamic Dark/Light mode support
+│   └── ...               # Toast, Notifications, Validations
+├── stores/               # Zustand state management
+│   ├── bookingStore.ts   # Temporary booking state
+│   ├── paymentStore.ts   # Transaction & Balance state
+│   └── settingsStore.ts  # Persisted user preferences
+└── constants/            # Design tokens & color palettes
 ```
 
-## Quick Start
+## 🛠️ Getting Started
 
-```bash
-cd mobile-app
-npm install
-npx expo start
-```
+1. **Install Dependencies**
+   ```bash
+   npm install
+   ```
 
-Scan the QR code with the **Expo Go** app on your Android device.
+2. **Environment Setup**
+   Ensure your `.env` file is configured with your Supabase credentials.
 
-## User Roles
+3. **Start the Development Server**
+   ```bash
+   npx expo start
+   ```
 
-| Role     | After login goes to            |
-|----------|-------------------------------|
-| Customer | `/customer/dashboard`          |
-| Employee | `/employee/dashboard`          |
-| Admin    | `/admin/dashboard`             |
+## 👥 User Roles & Navigation
 
-## Notes
+The app uses a role-based access control system that automatically directs users after authentication:
 
-- Supabase credentials are pre-configured in `lib/supabase.ts` (same project as the web frontend)
-- The `actions/` files are the mobile equivalent of the web's `app/actions/` — same file names, rewritten to use the Supabase JS client directly instead of Next.js server actions
-- Navigation uses Expo Router (file-based routing, same concept as Next.js App Router)
+| Role | Primary Navigation | Key Features |
+| :--- | :--- | :--- |
+| **Customer** | `/customer/(tabs)` | Book cleanings, track jobs, manage wallet. |
+| **Employee** | `/employee/(tabs)` | Claim jobs, track earnings, manage schedule. |
+| **Admin** | `/admin/dashboard` | System-wide oversight and job management. |
+
+## 📱 Key Features
+
+- **Real-time Updates:** Live job status tracking and instant messaging.
+- **Dynamic Theming:** Built-in support for light and dark modes via `themeContext`.
+- **Offline Support:** Strategic state management using Zustand for smooth performance.
+- **Secure Payments:** Integrated wallet system for seamless service transactions.

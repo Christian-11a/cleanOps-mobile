@@ -188,7 +188,8 @@ export async function getJobApplicants(jobId: string) {
         created_at
       )
     `)
-    .eq('job_id', jobId);
+    .eq('job_id', jobId)
+    .neq('status', 'REJECTED');
 
   if (error) throw error;
   return data;
@@ -319,7 +320,7 @@ export async function approveApplication(jobId: string, employeeId: string): Pro
 export async function rejectApplication(applicantId: string): Promise<void> {
   const { error } = await (supabase as any)
     .from('job_applications')
-    .delete()
+    .update({ status: 'REJECTED' })
     .eq('id', applicantId);
 
   if (error) throw error;

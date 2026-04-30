@@ -137,9 +137,12 @@ export default function EmployeeJobsTab() {
           contentContainerStyle={[st.listContent, { paddingBottom: insets.bottom + 80 }]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchJobs(); }} tintColor={C.blue600} />}
           renderItem={({ item }) => {
-            const isApplied = (item as any).application_status === 'PENDING';
-            const displayStatus = isApplied ? 'APPLIED' : item.status.replace('_', ' ');
-            const dotColor = isApplied ? C.blue600 : (item.status === 'COMPLETED' ? C.success : (item.status === 'IN_PROGRESS' ? C.blue600 : C.warning));
+            const appStatus = (item as any).application_status;
+            const isApplied = appStatus === 'PENDING';
+            const isRejected = appStatus === 'REJECTED';
+            
+            const displayStatus = isRejected ? 'DECLINED' : (isApplied ? 'APPLIED' : item.status.replace('_', ' '));
+            const dotColor = isRejected ? C.error : (isApplied ? C.blue600 : (item.status === 'COMPLETED' ? C.success : (item.status === 'IN_PROGRESS' ? C.blue600 : C.warning)));
 
             return (
               <TouchableOpacity 
@@ -148,7 +151,7 @@ export default function EmployeeJobsTab() {
               >
                 <View style={st.cardTop}>
                   <View style={{ flex: 1 }}>
-                    <Text style={[st.cardTitle, { color: C.text1 }]}>{item.size || 'Home'} Cleaning</Text>
+                    <Text style={[st.cardTitle, { color: C.text1 }]}>{item.title || item.tasks?.[0] || 'Home Cleaning'}</Text>
                     <View style={st.addressRow}>
                         <Ionicons name="location-outline" size={12} color={C.text3} />
                         <Text style={[st.addressText, { color: C.text3 }]} numberOfLines={1}>{item.location_address}</Text>

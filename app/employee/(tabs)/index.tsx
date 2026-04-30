@@ -219,7 +219,7 @@ export default function EmployeeFeedScreen() {
     const priorityBg = isUrgent ? '#fee2e2' : (item.urgency === 'NORMAL' ? '#fef3c7' : '#dcfce7');
     const priorityText = isUrgent ? '#b91c1c' : (item.urgency === 'NORMAL' ? '#92400e' : '#166534');
 
-    const jobTitle = item.title || (item.size ? `${item.size} Clean` : 'Home Cleaning');
+    const jobTitle = item.title || item.tasks?.[0] || 'Home Cleaning';
 
     // Calculate real distance if we have both coordinates
     let displayDistance = item.distance != null ? item.distance.toFixed(1) : '--';
