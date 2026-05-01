@@ -9,7 +9,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/lib/themeContext';
 import { useAuth } from '@/lib/authContext';
-import { createJob } from '@/actions/jobs';
+import { createJob, getCustomerJobs } from '@/actions/jobs';
+import { getPlatformConfig } from '@/actions/config';
 import { getBalance, addMoney } from '@/actions/payments';
 import { getPaymentMethods, addPaymentMethod } from '@/stores/paymentStore';
 import { 
@@ -384,6 +385,27 @@ export function BookingForm() {
     }
 
     try {
+      // 1. Check Platform Config (Job Limit & Maintenance Mode)
+      const config = await getPlatformConfig();
+      if (config.maintenance_mode) {
+        Alert.alert('Maintenance Mode', 'The platform is currently under maintenance. New bookings are temporarily disabled.');
+        setLoading(false);
+        return;
+      }
+
+      const activeJobs = await getCustomerJobs();
+      const openOrActiveCount = activeJobs.filter(j => ['OPEN', 'IN_PROGRESS', 'PENDING_REVIEW'].includes(j.status)).length;
+      
+      if (openOrActiveCount >= config.max_active_jobs) {
+        Alert.alert(
+          'Booking Limit Reached',
+          `You currently have ${openOrActiveCount} active bookings. The platform limit is ${config.max_active_jobs} concurrent bookings. Please wait for your current jobs to complete before booking again.`
+        );
+        setLoading(false);
+        return;
+      }
+
+      // 2. Check Balance
       const currentBalance = await getBalance();
       if (currentBalance < priceInDollars) {
         setLoading(false);
