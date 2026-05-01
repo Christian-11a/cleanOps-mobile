@@ -58,17 +58,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       
-      if (event === 'SIGNED_OUT') {
+      if (event === 'SIGNED_OUT' || !session?.user) {
         setProfile(null);
         setLoading(false);
-      } else if (session?.user) {
-        fetchProfile(session.user.id);
       } else {
-        setProfile(null);
+        // Force loading state when switching accounts so the router waits for the new profile
+        setLoading(true);
+        await fetchProfile(session.user.id);
+        setLoading(false);
       }
     });
 
