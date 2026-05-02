@@ -48,8 +48,7 @@ export function isValidCardholder(name: string): boolean {
  */
 export function isStrictAddress(address: string): boolean {
   const trimmed = address.trim();
-  const hasSpace = trimmed.includes(' ');
-  return trimmed.length >= 10 && hasSpace;
+  return trimmed.length >= 5;
 }
 
 /**

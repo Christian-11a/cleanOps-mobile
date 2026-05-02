@@ -214,7 +214,7 @@ export default function EmployeeFeedScreen() {
 
   const renderJobItem = ({ item }: { item: Job }) => {
     const isUrgent = item.urgency === 'HIGH';
-    const priorityLabel = isUrgent ? 'Urgent' : (item.urgency === 'NORMAL' ? 'Med' : 'Std');
+    const priorityLabel = isUrgent ? 'Urgent' : (item.urgency === 'NORMAL' ? 'Medium' : 'Standard');
     const priorityColor = isUrgent ? '#ef4444' : (item.urgency === 'NORMAL' ? '#f59e0b' : '#22c55e');
     const priorityBg = isUrgent ? '#fee2e2' : (item.urgency === 'NORMAL' ? '#fef3c7' : '#dcfce7');
     const priorityText = isUrgent ? '#b91c1c' : (item.urgency === 'NORMAL' ? '#92400e' : '#166534');

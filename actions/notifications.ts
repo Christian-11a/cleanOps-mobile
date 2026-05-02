@@ -138,6 +138,12 @@ export function formatNotification(n: DBNotification): {
         desc: `${p.reviewer_name || 'A customer'} gave you ${stars}`,
         icon: '⭐', color: '#fbbf24',
       };
+    case 'new_message':
+      return {
+        title: `Message from ${p.sender_name || 'Someone'} 💬`,
+        desc: p.message_snippet || 'Sent you a new message.',
+        icon: '💬', color: '#0ea5e9',
+      };
     default:
       return {
         title: 'Notification',
