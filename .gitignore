@@ -32,7 +32,6 @@ Thumbs.db
 # package-lock.json
 
 .claude
-migrations
 Remarks_mobile.txt
 session_logs/
 .gemini
