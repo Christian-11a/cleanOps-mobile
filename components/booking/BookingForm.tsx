@@ -80,12 +80,6 @@ export function BookingForm() {
   }, [cleanType]);
 
   useEffect(() => {
-    if (step === 'location' && !coords && !isLocating && !address) {
-      handleUseCurrentLocation();
-    }
-  }, [step]);
-
-  useEffect(() => {
     loadPaymentMethods();
   }, []);
 
@@ -441,6 +435,7 @@ export function BookingForm() {
   }
 
   if (step === 'success') {
+    const urgencyObj = URGENCIES.find(u => u.value === urgency);
     return (
       <View style={[st.container, { backgroundColor: C.bg }]}>
         <ScrollView contentContainerStyle={st.successScroll} showsVerticalScrollIndicator={false}>
@@ -459,8 +454,8 @@ export function BookingForm() {
                 <Text style={[st.successCardTitle, { color: C.text1 }]}>
                   {CLEAN_TYPES.find(t => t.id === cleanType)?.label}
                 </Text>
-                <View style={[st.priorityBadge, { backgroundColor: isDark ? '#064e3b' : '#dcfce7' }]}>
-                  <Text style={[st.priorityBadgeText, { color: isDark ? '#34d399' : '#15803d' }]}>{urgency} Priority</Text>
+                <View style={[st.priorityBadge, { backgroundColor: urgencyObj?.color + '20' }]}>
+                  <Text style={[st.priorityBadgeText, { color: urgencyObj?.color }]}>{urgencyObj?.label}</Text>
                 </View>
               </View>
               <Text style={[st.successCardAddress, { color: C.text3 }]}>{address || 'No address provided'}</Text>
@@ -698,7 +693,17 @@ export function BookingForm() {
             <Text style={[st.stepTitle, { color: C.text1 }]}>Review & Post</Text>
             <Text style={[st.stepSub, { color: C.text3 }]}>Confirm everything before posting</Text>
             <View style={[st.reviewCard, { backgroundColor: C.surface, borderColor: C.divider }]}>
-              <View style={st.reviewHeader}><View><Text style={[st.reviewType, { color: C.text1 }]}>{CLEAN_TYPES.find(t => t.id === cleanType)?.label}</Text><Text style={[st.reviewAddress, { color: C.text3 }]}>{address || 'No address provided'}</Text></View><View style={[st.reviewPriority, { backgroundColor: isDark ? C.blue800 : '#e0f2fe' }]}><Text style={[st.reviewPriorityText, { color: C.blue400 }]}>{urgency}</Text></View></View>
+              <View style={st.reviewHeader}>
+                <View>
+                  <Text style={[st.reviewType, { color: C.text1 }]}>{CLEAN_TYPES.find(t => t.id === cleanType)?.label}</Text>
+                  <Text style={[st.reviewAddress, { color: C.text3 }]}>{address || 'No address provided'}</Text>
+                </View>
+                <View style={[st.reviewPriority, { backgroundColor: URGENCIES.find(u => u.value === urgency)?.color + '20' }]}>
+                  <Text style={[st.reviewPriorityText, { color: URGENCIES.find(u => u.value === urgency)?.color }]}>
+                    {URGENCIES.find(u => u.value === urgency)?.label}
+                  </Text>
+                </View>
+              </View>
               <View style={[st.priceBreakdown, { borderTopColor: C.divider }]}>
                 <View style={st.priceRow}><Text style={[st.priceLabel, { color: C.text3 }]}>Base price</Text><Text style={[st.priceValue, { color: C.text1 }]}>${(CLEAN_TYPES.find(t => t.id === cleanType)?.price || 0).toFixed(0)}</Text></View>
                 {selectedTasks.length > 0 && <View style={st.priceRow}><Text style={[st.priceLabel, { color: C.text3 }]}>{selectedTasks.length} extra tasks</Text><Text style={[st.priceValue, { color: C.text1 }]}>+${(selectedTasks.length * 5).toFixed(0)}</Text></View>}
